@@ -43,10 +43,12 @@ codes; adapt only the ecosystem adapters. Every Java test gets a faithful C# cou
 | S5 | Engine orchestration + CLI wiring: `CliExecution(+Factory)`, `ExecutionContext`, `BaselineRunner`, `MutationRunPlanner`, `MutationExecution`, `ExecutionOutcomeWriter`, `ManifestWriter`, `CliApplication` | S2, S3, S4 |
 | S6 | Integration/acceptance tier (real .NET SDK + coverlet), gated `[Trait("type","IntegrationTests")]` | S5 |
 | S7 | **Independent evaluation gate:** a fresh reviewer on model `gpt-5.6-sol`, briefed with **Mr. Das's original requirements only** (no design docs, decisions, or departures), assesses the finished port and reports pass / gaps | S6 |
+| S8 | **Real-world dogfooding ("rubber meets the road"):** once the whole port is merged + pushed, run the finished `mutate4csharp` against three sibling C# repos — `../crap4csharp`, this repo (`mutate4csharp`, self-mutation), and `../dry4csharp` — and capture mutation results + any tool defects | S7 (post-merge) |
 
-**Critical path:** S1 → S2 → S3 → S5 → S6 → S7. After S1, Track A (S2 → S3) runs concurrently with
-Track B (S4); S5 is the join. Within S3, the Cobertura parser (T8) and project/module resolution (T9)
-can start right after S1. **S7 runs last — only once the entire port is complete.**
+**Critical path:** S1 → S2 → S3 → S5 → S6 → S7 → S8. After S1, Track A (S2 → S3) runs concurrently
+with Track B (S4); S5 is the join. Within S3, the Cobertura parser (T8) and project/module resolution
+(T9) can start right after S1. **S7 (independent evaluation) then S8 (real-world dogfooding) run last —
+S8 only once the entire port is merged and pushed.**
 
 ## Tasks (Tx)
 
@@ -71,6 +73,7 @@ can start right after S1. **S7 runs last — only once the entire port is comple
 | T17 | S6 | Process/test executor IT on real `dotnet test` | integration |
 | T18 | S6 | `MainAcceptanceTest` — end-to-end .NET sample projects; `TestProjectFactory` (csproj + xUnit + `type`/`no-mutate` traits) | acceptance |
 | T19 | S7 | **Independent evaluation:** launch a `gpt-5.6-sol` agent whose entire brief is the **`## Requirements` section of this feature doc, verbatim** — and nothing else (not the rest of this file, not `decisions.md`, not DD1–DD3, not any design rationale). It independently inspects `mutate4csharp` (and may consult the read-only `mutate4java` the requirements name) and reports whether the port meets the requirements. | independent report |
+| T20 | S8 | **Dogfood on real code:** run the built `mutate4csharp` against representative covered `.cs` files in `../crap4csharp`, `mutate4csharp` (self), and `../dry4csharp` (each needs a `<Project>.Tests\|.UnitTests` with unit tests); capture killed / survived / uncovered + any tool defects and report to Mr. Das. | dogfood results |
 
 ## Risks (Rx)
 
@@ -127,3 +130,19 @@ can start right after S1. **S7 runs last — only once the entire port is comple
   `docs/decisions.md`, the DD1–DD3 departures, and all design rationale — so the judgment is unbiased.
   Intended consequence: the evaluator is unaware the departures were sanctioned, so it may report
   DD1–DD3 as deviations; that raw signal goes to Mr. Das.
+- **Real-world dogfooding (S8/T20):** once the entire port is merged and pushed, the finished tool is
+  run against three sibling C# repos — `../crap4csharp`, this repo (`mutate4csharp`, self-mutation),
+  and `../dry4csharp` — the actual rubber-meets-the-road validation. Each target must be a buildable C#
+  project with unit tests (`<Project>.Tests`/`.UnitTests`). ⚠️ Write-scope: the tool writes an embedded
+  manifest into a target's source on clean runs and mutates worker copies — dogfooding the **external**
+  siblings should run against copies (or with explicit authorization) to respect the "write only within
+  this repo" guardrail; self-mutation of `mutate4csharp` is in scope. Surviving mutants + tool defects
+  report back to Mr. Das.
+
+## Progress
+
+Per-task log (Dave implements → Bhaskar verifies → Anders reviews → JARVIS commits).
+
+| Task | Status | Dave | Bhaskar | Anders | Commit |
+|------|--------|------|---------|--------|--------|
+| T1 | Done | ✅ | ✅ | ✅ | `baf8345` |
