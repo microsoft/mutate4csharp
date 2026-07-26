@@ -4,7 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <Product>crap4csharp</Product>
+    <Product>mutate4csharp</Product>
     <AssemblyName>Microsoft.$(MSBuildProjectName)</AssemblyName>
     <RootNamespace>Microsoft.$(MSBuildProjectName.Replace(" ", "_"))</RootNamespace>
     <Copyright>(c) Microsoft</Copyright>

@@ -31,5 +31,5 @@
     </PackageReference>
   </ItemGroup>
 
-  <Import Project=".\Crap4CSharp.Common.targets" />
+  <Import Project=".\Mutate4CSharp.Common.targets" />
 </Project>

@@ -15,9 +15,9 @@ Always reload and strictly adhere to guardrails in `../copilot-instructions.md`.
 
 0. Review the current open changes against Clean Architecture, YAGNI, DRY, and SOLID.
 
-1. **Fidelity check.** Confirm the change preserves parity with `crap4java` (read-only, `../crap4java`)
+1. **Fidelity check.** Confirm the change preserves parity with `mutate4java` (read-only, `../mutate4java`)
    where fidelity is required, and correctly implements the approved deliberate departures
-   (fail-fast, richer complexity, coverage-key FQN) per `docs/decisions.md`. Confirm each ported Java
+   (DD1–DD3: C#-specific scope kinds, no-tests fail-fast, unit-only test scoping) per `docs/decisions.md`. Confirm each ported Java
    test has a faithful C# counterpart asserting the same behavior.
 
 2. Ensure no hardcoded secrets.
