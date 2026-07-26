@@ -141,8 +141,9 @@ S8 only once the entire port is merged and pushed.**
 
 ## Progress
 
-Per-task log (Dave implements → Bhaskar verifies → Anders reviews → JARVIS commits).
+Per-task log (Dave implements → Bhaskar verifies → Anders reviews → JARVIS commits). See `git log` for commit SHAs.
 
-| Task | Status | Dave | Bhaskar | Anders | Commit |
-|------|--------|------|---------|--------|--------|
-| T1 | Done | ✅ | ✅ | ✅ | `baf8345` |
+| Task | Status | Dave | Bhaskar | Anders |
+|------|--------|------|---------|--------|
+| T1 | Done | ✅ | ✅ | ✅ |
+| T2 | Done | ✅ | ✅ | ✅ |
