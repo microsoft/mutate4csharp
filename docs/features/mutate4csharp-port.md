@@ -138,6 +138,10 @@ S8 only once the entire port is merged and pushed.**
   siblings should run against copies (or with explicit authorization) to respect the "write only within
   this repo" guardrail; self-mutation of `mutate4csharp` is in scope. Surviving mutants + tool defects
   report back to Mr. Das.
+- **Carry-forward — T15 wiring (Anders, T4 review):** keep `Program` as the .NET entry point — wire
+  `Program.Main(args)` → `Cli.Main.run(...)` → `CliApplication.execute` + `ExitIfNeeded`; do **not**
+  make `Cli.Main` an entry point. Treat `ParseOutcome.ExitCode == -1` as "continue with `Arguments`",
+  distinct from `0` (help success) — the faithful magic-number contract.
 
 ## Progress
 
@@ -148,3 +152,6 @@ Per-task log (Dave implements → Bhaskar verifies → Anders reviews → JARVIS
 | T1 | Done | ✅ | ✅ | ✅ |
 | T2 | Done | ✅ | ✅ | ✅ |
 | T3 | Done | ✅ | ✅ | ✅ |
+| T4 | Done | ✅ | ✅ | ✅ |
+
+**Slice S1 (pure, no-Roslyn foundation) complete** — model + manifest + CLI parser.
