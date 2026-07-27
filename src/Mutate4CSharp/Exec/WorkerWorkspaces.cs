@@ -7,11 +7,13 @@ namespace Microsoft.Mutate4CSharp.Exec;
 /// (<c>AutoCloseable</c>).
 /// </summary>
 /// <remarks>
-/// This is the minimal T13 slice needed to type <see cref="IWorkspaceManager.CreateWorkerWorkspaces"/>
-/// and satisfy the copy/cleanup contract asserted by <c>CopiedWorkspaceManagerTest</c>. mutate4java's
-/// full cleanup decomposition — the retrying <c>WorkerCleanup</c> / <c>WorkerDirectoryDelete</c> /
-/// <c>WorkerWorkspaceCloser</c> collaborators and their injected delete/sleep seams — lands with the
-/// parallel worker pool in T14, which owns <c>WorkerWorkspacesTest</c>.
+/// mutate4java's <c>WorkerWorkspaces</c> is a <c>record</c>, but the C# port keeps it a
+/// <c>sealed class</c> (Anders' T13 ruling): it is a reference-identity resource handle, not a value,
+/// so a record over its <see cref="IReadOnlyList{T}"/> / handle fields would emit a misleading
+/// reference-based <c>Equals</c> nobody should call. The full cleanup decomposition — the retrying
+/// <see cref="WorkerCleanup"/> / <see cref="WorkerDirectoryDelete"/> / <see cref="WorkerWorkspaceCloser"/>
+/// collaborators reached through the injected <see cref="DeleteAttempt"/> / <see cref="RetrySleeper"/> /
+/// <see cref="DeleteTree"/> seams — makes the Windows file-lock retry testable deterministically.
 /// </remarks>
 public sealed class WorkerWorkspaces : IDisposable
 {
@@ -38,13 +40,81 @@ public sealed class WorkerWorkspaces : IDisposable
     public IReadOnlyList<string> WorkerRoots => _workerRoots;
 
     /// <summary>
-    /// Deletes the run directory (and every worker copy beneath it) if it still exists.
+    /// Deletes the run directory (and every worker copy beneath it) via the retrying cleanup — the
+    /// faithful analog of mutate4java's <c>close()</c>. Does nothing when it is already gone.
     /// </summary>
+    /// <exception cref="InvalidOperationException">The run directory could not be deleted after retries.</exception>
     public void Dispose()
     {
-        if (Directory.Exists(_runRoot))
+        new WorkerWorkspaceCloser().Close(_runRoot);
+    }
+
+    /// <summary>
+    /// Tries to delete <paramref name="runRoot"/> with the default recursive delete, returning the
+    /// <see cref="IOException"/> it fails with (or <see langword="null"/> on success). Faithful port of
+    /// mutate4java's static <c>tryDelete(runRoot)</c>.
+    /// </summary>
+    /// <param name="runRoot">The run directory to delete.</param>
+    /// <returns>The failure, or <see langword="null"/> on success.</returns>
+    public static IOException? TryDelete(string runRoot)
+    {
+        return TryDelete(runRoot, new WorkerDirectoryDelete().Delete);
+    }
+
+    /// <summary>
+    /// Tries to delete <paramref name="runRoot"/> with the injected <paramref name="deleteTree"/>,
+    /// returning the <see cref="IOException"/> it fails with (or <see langword="null"/> on success) —
+    /// the seam that makes the Windows file-lock case testable. Faithful port of mutate4java's static
+    /// <c>tryDelete(runRoot, deleteTree)</c>.
+    /// </summary>
+    /// <param name="runRoot">The run directory to delete.</param>
+    /// <param name="deleteTree">The delete seam.</param>
+    /// <returns>The failure, or <see langword="null"/> on success.</returns>
+    public static IOException? TryDelete(string runRoot, DeleteTree deleteTree)
+    {
+        ArgumentNullException.ThrowIfNull(deleteTree);
+        try
         {
-            Directory.Delete(_runRoot, recursive: true);
+            deleteTree(runRoot);
+            return null;
+        }
+        catch (IOException ex)
+        {
+            return ex;
         }
     }
+
+    /// <summary>
+    /// Deletes <paramref name="runRoot"/> with the injected delete/sleep seams, retrying transient
+    /// failures. Faithful port of mutate4java's static <c>deleteWithRetries</c>, delegating to
+    /// <see cref="WorkerCleanup.DeleteWithRetries"/>.
+    /// </summary>
+    /// <param name="runRoot">The run directory to delete.</param>
+    /// <param name="deleteAttempt">The delete seam, returning the failure or <see langword="null"/>.</param>
+    /// <param name="retrySleeper">The sleep seam invoked between attempts.</param>
+    /// <returns><see langword="null"/> on success, or the last failure once the retry limit is reached.</returns>
+    public static IOException? DeleteWithRetries(string runRoot, DeleteAttempt deleteAttempt, RetrySleeper retrySleeper)
+    {
+        return WorkerCleanup.DeleteWithRetries(runRoot, deleteAttempt, retrySleeper);
+    }
+
+    /// <summary>
+    /// A single delete attempt: returns the <see cref="IOException"/> it failed with, or
+    /// <see langword="null"/> on success. Port of mutate4java's <c>DeleteAttempt</c> functional interface.
+    /// </summary>
+    /// <param name="runRoot">The run directory to delete.</param>
+    /// <returns>The failure, or <see langword="null"/> on success.</returns>
+    public delegate IOException? DeleteAttempt(string runRoot);
+
+    /// <summary>
+    /// Sleeps between delete attempts. Port of mutate4java's <c>RetrySleeper</c> functional interface.
+    /// </summary>
+    public delegate void RetrySleeper();
+
+    /// <summary>
+    /// Deletes a directory tree, throwing <see cref="IOException"/> on failure. Port of mutate4java's
+    /// <c>DeleteTree</c> functional interface.
+    /// </summary>
+    /// <param name="runRoot">The directory tree to delete.</param>
+    public delegate void DeleteTree(string runRoot);
 }

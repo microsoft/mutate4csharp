@@ -173,6 +173,17 @@ S8 only once the entire port is merged and pushed.**
   the copied file; T14 job construction + `CreateWorkerWorkspaces(copyRoot, …)` must share the repo
   root as the single base. T14 keeps `WorkerWorkspaces` a **`sealed class`** (resource handle, not a
   value — Anders' ruling).
+- **Carry-forward — T15 worker test scoping (Anders, T14 review, CRITICAL):** the mutation-run executor
+  must target the resolved test project by a **repo-relative** path (e.g. `dotnet test <TestProjRelPath>
+  --filter …`) invoked with **cwd = worker root**, so each worker tests its **mutated copy**
+  (`workerRoot/<relpath>`). An ABSOLUTE original-repo path would test the un-mutated original → every
+  mutant silently **SURVIVES** (catastrophic false-negative). `--test-command` path exempt. Also:
+  `MutationExecution` `using`s BOTH the pool AND `WorkerWorkspaces` (cleanup on fault); worker count =
+  `Max(1, Min(jobs.Count, maxWorkers))`, passed to `CreateWorkerWorkspaces(copyRoot=repoRoot, count)`.
+- **Carry-forward — T17 robustness (Anders, T14 review, proposal-only):** `WorkerWorkspaces.TryDelete`
+  could also catch `UnauthorizedAccessException` (Java's `AccessDeniedException` is an `IOException`;
+  .NET's is not) → wrap as retryable; and blocking workers could use `TaskCreationOptions.LongRunning`
+  (closer to `newFixedThreadPool`). Non-blocking niceties.
 - **`.gitignore` convention (Anders, T8 review):** anchor project-specific, root-scoped output dir
   names (`/coverage/`; `/artifacts/` if the .NET-8 artifacts layout is later adopted); keep genuine
   build-output names (`bin`/`obj`/`Debug`/`Release`) depth-agnostic (unanchored). No proactive sweep.
@@ -196,6 +207,7 @@ Per-task log (Dave implements → Bhaskar verifies → Anders reviews → JARVIS
 | T11 | Done | ✅ | ✅ | ✅ |
 | T12 | Done | ✅ | ✅ | ✅ |
 | T13 | Done | ✅ | ✅ | ✅ |
+| T14 | Done | ✅ | ✅ | ✅ |
 
 **Slices:** S1 ✅ · S2 ✅ · S3 (selection/coverage/report) ✅ · S4 (exec/workers) in progress.
 - **Carry-forward — T11 `ProcessCommandExecutor` (Anders, T9 review):** `ICommandExecutor.Run` takes
