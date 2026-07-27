@@ -31,4 +31,20 @@ public interface ITestCommandExecutor
     {
         return this;
     }
+
+    /// <summary>
+    /// Returns an executor that scopes the default test command to the given test project, expressed
+    /// as a path <em>relative to the repository root</em>. During a mutation run each worker runs with
+    /// its own repo-root copy as the working directory, so a relative target resolves to the mutated
+    /// copy (<c>workerRoot/&lt;relativeTestProjectPath&gt;</c>); an absolute original-repo path would
+    /// test the un-mutated original and every mutant would silently survive. The default implementation
+    /// ignores the scoping and returns this executor unchanged, so a <c>--test-command</c> override (or
+    /// a stub) is left untouched.
+    /// </summary>
+    /// <param name="relativeTestProjectPath">The repo-root-relative path to the resolved test project.</param>
+    /// <returns>An executor scoped to <paramref name="relativeTestProjectPath"/>, or this executor if unsupported.</returns>
+    ITestCommandExecutor WithTestProject(string relativeTestProjectPath)
+    {
+        return this;
+    }
 }

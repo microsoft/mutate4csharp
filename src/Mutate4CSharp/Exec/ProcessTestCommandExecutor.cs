@@ -21,8 +21,10 @@ using Microsoft.Mutate4CSharp.Model;
 /// </remarks>
 public sealed class ProcessTestCommandExecutor : ITestCommandExecutor
 {
+    private const string UnitTestFilter = "type!=IntegrationTests&Category!=no-mutate";
+
     private static readonly IReadOnlyList<string> DefaultCommand =
-        ["dotnet", "test", "--filter", "type!=IntegrationTests&Category!=no-mutate"];
+        ["dotnet", "test", "--filter", UnitTestFilter];
 
     private readonly ProcessLauncher _launcher;
 
@@ -85,5 +87,13 @@ public sealed class ProcessTestCommandExecutor : ITestCommandExecutor
     public ITestCommandExecutor WithCommand(string command)
     {
         return new ProcessTestCommandExecutor(command);
+    }
+
+    /// <inheritdoc/>
+    public ITestCommandExecutor WithTestProject(string relativeTestProjectPath)
+    {
+        ArgumentNullException.ThrowIfNull(relativeTestProjectPath);
+        return new ProcessTestCommandExecutor(
+            ["dotnet", "test", relativeTestProjectPath, "--filter", UnitTestFilter]);
     }
 }

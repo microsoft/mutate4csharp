@@ -7,12 +7,14 @@ namespace Microsoft.Mutate4CSharp.Tests;
 public class ProgramTests
 {
     /// <summary>
-    /// The stub entry point returns the success exit code.
+    /// The entry point prints usage and returns the success exit code for <c>--help</c>, exercising
+    /// the <c>Program.Main → Cli.Main.Run → CliApplication.Execute</c> wiring without spawning a real
+    /// test run (help short-circuits before any module resolution).
     /// </summary>
     [Fact]
     [Trait("type", "UnitTests")]
-    public void MainReturnsSuccessExitCode()
+    public void MainReturnsSuccessExitCodeForHelp()
     {
-        Program.Main().Should().Be(0);
+        Program.Main(["--help"]).Should().Be(0);
     }
 }

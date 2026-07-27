@@ -63,6 +63,16 @@ Exit code `2` is therefore **broadened** to "baseline failed **OR** no unit-test
 unit tests executed" — three sub-reasons documented under one code, keeping the `0/1/2/3` contract.
 All stdout report strings are unchanged; DD2 adds **stderr** lines only.
 
+**Fidelity principle — stdout verbatim, stderr adapted.** Only **stdout report strings** carry the
+byte-for-byte verbatim guarantee (asserted by the formatter/report tests). **stderr diagnostics** are
+**adapted to the C# ecosystem** where the Java text names a Java-only artifact: e.g. the coverage-reuse
+messages (`"Reusing existing coverage data."` / `"Coverage reuse requested, but no existing coverage
+report was found. Continuing without coverage filtering."`) **drop mutate4java's JaCoCo path**
+(`target/site/jacoco/jacoco.xml`) — the coverlet equivalent lives at a non-deterministic
+`TestResults/<guid>/coverage.cobertura.xml` not knowable at message time. Substance (reuse vs.
+not-found→continuing) is preserved. Same principle already governs the DD2 stderr lines and the usage
+text.
+
 ## Supported mutation set (faithful — spec §6.1)
 
 One mutation site per (AST-based; comments, string/char literals, generic `<>`, and manifest content
@@ -169,3 +179,17 @@ node's source text; `startLine`/`endLine` from Roslyn line mapping. `addScope` d
 - Kept from the scaffold: `.editorconfig`; analyzers (NetAnalyzers / StyleCop / BannedApi);
   warnings-as-errors in Release; `global.json`; `nuget.config` (nuget.org only); the agentic-loop
   files; `meta-design` + feature template; the `build-test` skills.
+
+## Test-parity ledger
+
+The fidelity mandate is "every mutate4java test → a faithful C# counterpart." Deviations from a
+1:1 port are recorded here so an auditor never reads a dropped test as missing coverage:
+
+- **T15 CLI-application oracle = 25 cases = 21 faithful Java ports + 4 DD2-new.** The 4 new cases pin
+  the DD2/DD2b departures (no-owning-project, no-test-project, zero-unit-tests, reuse/`--test-command`
+  exemptions) — departures that have **no Java oracle** by construction.
+- **4 Java tests dropped as Maven-obsolete (under DD3/A4).** `moduleRootFor` / `sourceSuffix`-style
+  tests asserted mutate4java's whole-owning-module Maven resolution and JaCoCo package-path keying,
+  both of which DD3 (single-project `<Project>.Tests|.UnitTests` scoping) and A4 (Cobertura
+  `<sources>`-relative absolute-path keying) **replace**. The replacement behavior is covered by
+  `ModuleResolverTests` + the Cobertura parser tests — so the behavior is not lost, only relocated.

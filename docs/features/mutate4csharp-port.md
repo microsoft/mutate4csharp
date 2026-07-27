@@ -208,8 +208,9 @@ Per-task log (Dave implements → Bhaskar verifies → Anders reviews → JARVIS
 | T12 | Done | ✅ | ✅ | ✅ |
 | T13 | Done | ✅ | ✅ | ✅ |
 | T14 | Done | ✅ | ✅ | ✅ |
+| T15 | Done | ✅ | ✅ | ✅ |
 
-**Slices:** S1 ✅ · S2 ✅ · S3 (selection/coverage/report) ✅ · S4 (exec/workers) in progress.
+**Slices:** S1 ✅ · S2 ✅ · S3 (selection/coverage/report) ✅ · S4 (exec/workers) ✅ · S5 (engine + CLI wiring) ✅ — **the tool is fully wired and runnable end-to-end (191 tests green).** Next: S6 integration/acceptance tier.
 - **Carry-forward — T11 `ProcessCommandExecutor` (Anders, T9 review):** `ICommandExecutor.Run` takes
   **argv** (`command[0]` = exe) — spawn via `Process.StartInfo.FileName` + `ArgumentList`, NOT a shell
   string; **merge stderr into `Output`** (Java `redirectErrorStream(true)` analog); set `TimedOut` /

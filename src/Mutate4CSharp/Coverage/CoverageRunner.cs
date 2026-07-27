@@ -35,7 +35,7 @@ using Microsoft.Mutate4CSharp.Project;
 /// reconciliation against a real coverlet report is the T16 integration test.
 /// </para>
 /// </remarks>
-public sealed class CoverageRunner
+public sealed class CoverageRunner : ICoverageRunner
 {
     private const long CoverageTimeoutMillis = 300_000L;
     private const string ResultsDirectoryName = "TestResults";
