@@ -8,7 +8,7 @@ namespace Microsoft.Mutate4CSharp.Model;
 /// <param name="Killed">Whether the mutant was killed by the tests.</param>
 /// <param name="DurationMillis">The wall-clock duration in milliseconds.</param>
 /// <param name="TimedOut">Whether the mutant run timed out.</param>
-/// <param name="Order">This mutant's 1-based order within the run.</param>
+/// <param name="Order">This mutant's 0-based position within the run (progress display renders it as <c>Order + 1</c>).</param>
 /// <param name="TotalJobs">The total number of jobs in the run.</param>
 public sealed record MutationResult(
     MutationSite Site,

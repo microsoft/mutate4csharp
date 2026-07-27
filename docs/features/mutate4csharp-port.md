@@ -141,7 +141,9 @@ S8 only once the entire port is merged and pushed.**
 - **Carry-forward — T15 wiring (Anders, T4 review):** keep `Program` as the .NET entry point — wire
   `Program.Main(args)` → `Cli.Main.run(...)` → `CliApplication.execute` + `ExitIfNeeded`; do **not**
   make `Cli.Main` an entry point. Treat `ParseOutcome.ExitCode == -1` as "continue with `Arguments`",
-  distinct from `0` (help success) — the faithful magic-number contract.
+  distinct from `0` (help success) — the faithful magic-number contract. Also `CliExecution` calls
+  `ScanMode.Render(parsed, context.SourceFile, context.Analysis)` (pure `ScanMode` takes DTOs, not
+  `ExecutionContext`, to avoid a Selection→Engine upward dependency).
 - **Carry-forward — S3/selection (Anders, T7 review):** the synthetic `file:` fallback scope is
   stamped on `CurrentScope` but has **no** manifest entry; when the differential selector consumes
   `ScopeId`, a `file:`-scoped site (no matching manifest scope) must degrade gracefully
@@ -172,8 +174,9 @@ Per-task log (Dave implements → Bhaskar verifies → Anders reviews → JARVIS
 | T7 | Done | ✅ | ✅ | ✅ |
 | T8 | Done | ✅ | ✅ | ✅ |
 | T9 | Done | ✅ | ✅ | ✅ |
+| T10 | Done | ✅ | ✅ | ✅ |
 
-**Slices:** S1 ✅ · S2 (Roslyn engine) ✅ · S3 (selection/coverage/report) in progress.
+**Slices:** S1 ✅ · S2 ✅ · S3 (selection/coverage/report) ✅ · S4 (exec/workers) in progress.
 - **Carry-forward — T11 `ProcessCommandExecutor` (Anders, T9 review):** `ICommandExecutor.Run` takes
   **argv** (`command[0]` = exe) — spawn via `Process.StartInfo.FileName` + `ArgumentList`, NOT a shell
   string; **merge stderr into `Output`** (Java `redirectErrorStream(true)` analog); set `TimedOut` /
