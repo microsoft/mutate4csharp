@@ -147,3 +147,4 @@ Per-task log (Dave implements → Bhaskar verifies → Anders reviews → JARVIS
 |------|--------|------|---------|--------|
 | T1 | Done | ✅ | ✅ | ✅ |
 | T2 | Done | ✅ | ✅ | ✅ |
+| T3 | Done | ✅ | ✅ | ✅ |

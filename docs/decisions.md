@@ -131,6 +131,16 @@ node's source text; `startLine`/`endLine` from Roslyn line mapping. `addScope` d
   + `Process.Kill(entireProcessTree: true)`; `IReadOnlyList<T>` returns; `Environment.ProcessorCount`
   for default max-workers (`max(1, N/2)`); ordinal string comparisons; single-file `CSharpCompilation`
   for the semantic model; file-scoped namespaces + `_camelCase` privates + `I`-prefixed interfaces.
+- **Static vs instance (CA1822):** `CA1822` is globally disabled in `.editorconfig` (alongside
+  `CA1515`/`CA2007`) — a purity/perf rule that fights deliberate app-level DI composition and never
+  flags a bug. **Mirror `mutate4java` per member:** port Java `static` members as `static` (e.g.
+  `ManifestValueCodec.encode/decode`), and keep Java instance-composed helpers as **instances**
+  (preserving the ctor/field-injection composition graph). Never staticize a stateless helper merely
+  to satisfy the analyzer.
+- **Ordinal sorting (fidelity landmine):** any Java `String.compareTo` / natural-order sort maps to
+  `StringComparer.Ordinal` (UTF-16 ordinal) — never a culture/invariant comparer. A culture comparer
+  would silently reorder and change hash-affecting order (manifest module hash, and later
+  selection/report ordering). Applies to all string ordering across the port.
 - **Greenlit engineering (behavior-neutral):** P1 single Roslyn walk (sites + scopes together); P2
   `record struct` for the tiny hot keys (`CoverageSite`, `ScopeRef`); P3 `Channel<MutationJob>` worker
   pool with identical scheduling semantics.
