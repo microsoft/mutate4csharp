@@ -154,5 +154,6 @@ Per-task log (Dave implements → Bhaskar verifies → Anders reviews → JARVIS
 | T3 | Done | ✅ | ✅ | ✅ |
 | T4 | Done | ✅ | ✅ | ✅ |
 | T5 | Done | ✅ | ✅ | ✅ |
+| T6 | Done | ✅ | ✅ | ✅ |
 
 **Slices:** S1 (T1–T4, pure foundation) ✅ complete · S2 (Roslyn engine) in progress.
