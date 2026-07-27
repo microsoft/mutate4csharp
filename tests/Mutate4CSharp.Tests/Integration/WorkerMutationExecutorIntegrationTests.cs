@@ -9,13 +9,14 @@ using Microsoft.Mutate4CSharp.Report;
 /// <summary>
 /// T17 — the worker-scoping keystone. It proves end-to-end that a mutation worker tests the MUTATED
 /// COPY, not the un-mutated original. It generates a tiny real .NET 8 sample (a <c>Calculator</c>
-/// production project plus an xUnit test project) into a unique temp root, makes a real per-worker copy
-/// with the production <see cref="CopiedWorkspaceManager"/>, splices a real
-/// <see cref="MutationSite"/> into the copy through the real <see cref="IsolatedMutationWorker"/>, and
-/// runs a real <c>dotnet test</c> through the real <see cref="ProcessTestCommandExecutor"/> scoped by
-/// the <see cref="ITestCommandExecutor.WithTestProject(string)"/> seam — the exact executor path
-/// <see cref="Engine.MutationRunPlanner"/> wires (a repo-root-relative test-project target, cwd = worker
-/// root, the DD3 unit filter).
+/// production project plus an xUnit test project, with a competing stray project and root <c>.sln</c>)
+/// via <see cref="TestProjectFactory"/> into a unique temp root, makes a real per-worker copy with the
+/// production <see cref="CopiedWorkspaceManager"/>, splices a real <see cref="MutationSite"/> into the
+/// copy through the real <see cref="IsolatedMutationWorker"/>, and runs a real <c>dotnet test</c>
+/// through the real <see cref="ProcessTestCommandExecutor"/> scoped by the
+/// <see cref="ITestCommandExecutor.WithTestProject(string)"/> seam — the exact executor path
+/// <see cref="Engine.MutationRunPlanner"/> wires (a repo-root-relative test-project target, cwd =
+/// worker root, the DD3 unit filter).
 /// </summary>
 /// <remarks>
 /// Per Anders' T14/T16 reviews this is the guard against risk R-C: if the mutation-run executor ever
@@ -76,110 +77,8 @@ public sealed class WorkerMutationExecutorIntegrationTests : IDisposable
         }
         """;
 
-    // DD3 anti-fan-out: a stray sibling project that intentionally does NOT compile. Referenced by the
-    // sample .sln, it is the whole-solution build target that a scoped `dotnet test <Sample.Tests.csproj>`
-    // must never touch; a fan-out to the solution would try to build it and fail the compile.
-    private const string StrayBrokenSource =
-        """
-        namespace Stray;
-
-        public static class Broken
-        {
-            public static int Value()
-            {
-                // Intentional compile error (string is not convertible to int): this project must
-                // never be built by a correctly scoped run.
-                return "not an int";
-            }
-        }
-        """;
-
-    private const string ProductionProject =
-        $"""
-        <Project Sdk="Microsoft.NET.Sdk">
-          <PropertyGroup>
-            <TargetFramework>{HermeticSample.TargetFramework}</TargetFramework>
-            <Nullable>enable</Nullable>
-            <ImplicitUsings>enable</ImplicitUsings>
-          </PropertyGroup>
-        </Project>
-        """;
-
-    private const string TestProject =
-        $"""
-        <Project Sdk="Microsoft.NET.Sdk">
-          <PropertyGroup>
-            <TargetFramework>{HermeticSample.TargetFramework}</TargetFramework>
-            <Nullable>enable</Nullable>
-            <ImplicitUsings>enable</ImplicitUsings>
-            <IsPackable>false</IsPackable>
-          </PropertyGroup>
-          <ItemGroup>
-            <PackageReference Include="Microsoft.NET.Test.Sdk" Version="{HermeticSample.TestSdkVersion}" />
-            <PackageReference Include="xunit" Version="{HermeticSample.XunitVersion}" />
-            <PackageReference Include="xunit.runner.visualstudio" Version="{HermeticSample.XunitVersion}" />
-            <PackageReference Include="coverlet.collector" Version="{HermeticSample.CoverletCollectorVersion}" />
-          </ItemGroup>
-          <ItemGroup>
-            <ProjectReference Include="../Sample/Sample.csproj" />
-          </ItemGroup>
-        </Project>
-        """;
-
-    private const string StrayProject =
-        $"""
-        <Project Sdk="Microsoft.NET.Sdk">
-          <PropertyGroup>
-            <TargetFramework>{HermeticSample.TargetFramework}</TargetFramework>
-            <Nullable>enable</Nullable>
-          </PropertyGroup>
-        </Project>
-        """;
-
-    private const string SolutionFile =
-        """
-        Microsoft Visual Studio Solution File, Format Version 12.00
-        # Visual Studio Version 17
-        Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sample", "Sample/Sample.csproj", "{A1111111-1111-1111-1111-111111111111}"
-        EndProject
-        Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sample.Tests", "Sample.Tests/Sample.Tests.csproj", "{B2222222-2222-2222-2222-222222222222}"
-        EndProject
-        Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Stray", "Stray/Stray.csproj", "{C3333333-3333-3333-3333-333333333333}"
-        EndProject
-        Global
-          GlobalSection(SolutionConfigurationPlatforms) = preSolution
-            Debug|Any CPU = Debug|Any CPU
-            Release|Any CPU = Release|Any CPU
-          EndGlobalSection
-          GlobalSection(ProjectConfigurationPlatforms) = postSolution
-            {A1111111-1111-1111-1111-111111111111}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-            {A1111111-1111-1111-1111-111111111111}.Debug|Any CPU.Build.0 = Debug|Any CPU
-            {A1111111-1111-1111-1111-111111111111}.Release|Any CPU.ActiveCfg = Release|Any CPU
-            {A1111111-1111-1111-1111-111111111111}.Release|Any CPU.Build.0 = Release|Any CPU
-            {B2222222-2222-2222-2222-222222222222}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-            {B2222222-2222-2222-2222-222222222222}.Debug|Any CPU.Build.0 = Debug|Any CPU
-            {B2222222-2222-2222-2222-222222222222}.Release|Any CPU.ActiveCfg = Release|Any CPU
-            {B2222222-2222-2222-2222-222222222222}.Release|Any CPU.Build.0 = Release|Any CPU
-            {C3333333-3333-3333-3333-333333333333}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-            {C3333333-3333-3333-3333-333333333333}.Debug|Any CPU.Build.0 = Debug|Any CPU
-            {C3333333-3333-3333-3333-333333333333}.Release|Any CPU.ActiveCfg = Release|Any CPU
-            {C3333333-3333-3333-3333-333333333333}.Release|Any CPU.Build.0 = Release|Any CPU
-          EndGlobalSection
-        EndGlobal
-        """;
-
-    private readonly string _root;
+    private TestProject? _project;
     private WorkerWorkspaces? _workspaces;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="WorkerMutationExecutorIntegrationTests"/> class,
-    /// creating the unique temp root that holds the generated sample the worker copies are made from.
-    /// </summary>
-    public WorkerMutationExecutorIntegrationTests()
-    {
-        _root = Path.Combine(Path.GetTempPath(), "m4cs-exec-it", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(_root);
-    }
 
     /// <summary>
     /// Best-effort teardown: disposes the real worker copies first (they hold the just-built test output
@@ -188,7 +87,7 @@ public sealed class WorkerMutationExecutorIntegrationTests : IDisposable
     public void Dispose()
     {
         BestEffortDisposeWorkspaces();
-        TryDeleteDirectory(_root);
+        _project?.Dispose();
         GC.SuppressFinalize(this);
     }
 
@@ -204,16 +103,16 @@ public sealed class WorkerMutationExecutorIntegrationTests : IDisposable
     [Trait("type", "IntegrationTests")]
     public void CoveredMutationInWorkerCopyIsKilledByScopedTestRun()
     {
-        Sample sample = WriteSample();
+        TestProject sample = WriteSample();
         string workerRoot = CreateWorkerCopy();
         MutationJob job = MutationJobFor(sample, "a + b", "a - b");
 
-        MutationResult result = RunMutant(workerRoot, sample.TestProjectRelativePath, job);
+        MutationResult result = RunMutant(workerRoot, TestProjectRelativePath(sample), job);
 
         result.Killed.Should().BeTrue(
             "flipping the covered `a + b` to `a - b` in the worker copy must fail the [Fact] and score KILLED");
         result.TimedOut.Should().BeFalse("the mutant is killed by a real test failure, not by a timeout");
-        File.ReadAllText(sample.OriginalCalculatorFile).Should().Be(
+        File.ReadAllText(sample.ProductionFile("Calculator.cs")).Should().Be(
             CalculatorSource, "only the worker copy is mutated; the original source is never touched (leak guard)");
     }
 
@@ -227,11 +126,11 @@ public sealed class WorkerMutationExecutorIntegrationTests : IDisposable
     [Trait("type", "IntegrationTests")]
     public void UncoveredMutationInWorkerCopySurvivesScopedTestRun()
     {
-        Sample sample = WriteSample();
+        TestProject sample = WriteSample();
         string workerRoot = CreateWorkerCopy();
         MutationJob job = MutationJobFor(sample, "a - b", "a + b");
 
-        MutationResult result = RunMutant(workerRoot, sample.TestProjectRelativePath, job);
+        MutationResult result = RunMutant(workerRoot, TestProjectRelativePath(sample), job);
 
         result.Killed.Should().BeFalse(
             "mutating the never-exercised Subtract keeps the covered [Fact] green, so the run exits 0 and SURVIVES");
@@ -248,16 +147,21 @@ public sealed class WorkerMutationExecutorIntegrationTests : IDisposable
     [Trait("type", "IntegrationTests")]
     public void ScopedTestRunDoesNotFanOutToCompetingSolution()
     {
-        Sample sample = WriteSample();
+        TestProject sample = WriteSample();
         string workerRoot = CreateWorkerCopy();
 
-        TestRun run = RunScopedTests(workerRoot, sample.TestProjectRelativePath);
+        TestRun run = RunScopedTests(workerRoot, TestProjectRelativePath(sample));
 
         run.Passed().Should().BeTrue(
             "the run targets Sample.Tests by its repo-relative path (cwd == worker root); the broken Stray and the "
             + "Sample.sln that references it are never built, so a fan-out to the solution — which would fail the "
             + "compile — did not happen");
         run.TimedOut.Should().BeFalse();
+    }
+
+    private static string TestProjectRelativePath(TestProject sample)
+    {
+        return sample.RelativeToRoot(sample.TestProjectFile);
     }
 
     private static ITestCommandExecutor ScopedExecutor(string testProjectRelativePath)
@@ -268,23 +172,24 @@ public sealed class WorkerMutationExecutorIntegrationTests : IDisposable
         return new ProcessTestCommandExecutor().WithTestProject(testProjectRelativePath);
     }
 
-    private static MutationJob MutationJobFor(Sample sample, string original, string replacement)
+    private static MutationJob MutationJobFor(TestProject sample, string original, string replacement)
     {
         // A real MutationSite whose span is the operator token, spliced by the real IsolatedMutationWorker
         // (source[..Start] + Replacement + source[End..]). Offsets are computed against the exact source
         // written to disk, so they match the byte-identical File.Copy worker copy regardless of newline
         // style.
+        string calculatorFile = sample.ProductionFile("Calculator.cs");
         int start = CalculatorSource.IndexOf(original, StringComparison.Ordinal);
         int lineNumber = 1 + CalculatorSource[..start].Count(character => character == '\n');
         MutationSite site = new(
-            sample.OriginalCalculatorFile,
+            calculatorFile,
             lineNumber,
             start,
             start + original.Length,
             original,
             replacement,
             $"replace '{original}' with '{replacement}'");
-        return new MutationJob(site, sample.CalculatorRelativePath, UnboundedTimeout, 0, 1);
+        return new MutationJob(site, sample.RelativeToRoot(calculatorFile), UnboundedTimeout, 0, 1);
     }
 
     private static T GuardDotnet<T>(Func<T> run)
@@ -297,27 +202,6 @@ public sealed class WorkerMutationExecutorIntegrationTests : IDisposable
         {
             throw new InvalidOperationException(
                 "Could not start 'dotnet'; the .NET 8 SDK must be on PATH for this integration test.", ex);
-        }
-    }
-
-    private static void TryDeleteDirectory(string directory)
-    {
-        if (!Directory.Exists(directory))
-        {
-            return;
-        }
-
-        try
-        {
-            Directory.Delete(directory, recursive: true);
-        }
-        catch (IOException)
-        {
-            // Best-effort: a test-host handle may still hold a transient lock; leave it for the OS sweep.
-        }
-        catch (UnauthorizedAccessException)
-        {
-            // Best-effort: a file may be momentarily locked or read-only; leave it for the OS sweep.
         }
     }
 
@@ -339,36 +223,21 @@ public sealed class WorkerMutationExecutorIntegrationTests : IDisposable
         // The real production copy path: CopiedWorkspaceManager copies the repo/workspace root into
         // %TEMP%/mutate4csharp/run-<guid>/worker-1 (excluding bin/obj/.git/.vs/TestResults), carrying the
         // hermetic guards. The handle is disposed best-effort in teardown.
-        _workspaces = new CopiedWorkspaceManager().CreateWorkerWorkspaces(_root, 1);
+        _workspaces = new CopiedWorkspaceManager().CreateWorkerWorkspaces(_project!.Root, 1);
         return _workspaces.WorkerRoots[0];
     }
 
-    private Sample WriteSample()
+    private TestProject WriteSample()
     {
-        HermeticSample.WriteHermeticGuards(_root);
-
-        string sampleDirectory = Path.Combine(_root, "Sample");
-        Directory.CreateDirectory(sampleDirectory);
-        File.WriteAllText(Path.Combine(sampleDirectory, "Sample.csproj"), ProductionProject);
-        string calculatorFile = Path.Combine(sampleDirectory, "Calculator.cs");
-        File.WriteAllText(calculatorFile, CalculatorSource);
-
-        string testDirectory = Path.Combine(_root, "Sample.Tests");
-        Directory.CreateDirectory(testDirectory);
-        string testProjectFile = Path.Combine(testDirectory, "Sample.Tests.csproj");
-        File.WriteAllText(testProjectFile, TestProject);
-        File.WriteAllText(Path.Combine(testDirectory, "CalculatorTests.cs"), CalculatorTestsSource);
-
-        string strayDirectory = Path.Combine(_root, "Stray");
-        Directory.CreateDirectory(strayDirectory);
-        File.WriteAllText(Path.Combine(strayDirectory, "Stray.csproj"), StrayProject);
-        File.WriteAllText(Path.Combine(strayDirectory, "Broken.cs"), StrayBrokenSource);
-        File.WriteAllText(Path.Combine(_root, "Sample.sln"), SolutionFile);
-
-        return new Sample(
-            calculatorFile,
-            Path.GetRelativePath(_root, calculatorFile),
-            Path.GetRelativePath(_root, testProjectFile));
+        // A production Calculator + xUnit test, plus the DD3 anti-fan-out trap: a deliberately broken
+        // Stray project referenced by a competing root .sln that a correctly scoped run must never build.
+        _project = new TestProjectFactory()
+            .WithProductionFile("Calculator.cs", CalculatorSource)
+            .WithTestFile("CalculatorTests.cs", CalculatorTestsSource)
+            .WithStrayProject()
+            .WithSolution()
+            .Create();
+        return _project;
     }
 
     private void BestEffortDisposeWorkspaces()
@@ -389,9 +258,4 @@ public sealed class WorkerMutationExecutorIntegrationTests : IDisposable
             // sweep so cleanup never fails the run.
         }
     }
-
-    private sealed record Sample(
-        string OriginalCalculatorFile,
-        string CalculatorRelativePath,
-        string TestProjectRelativePath);
 }
