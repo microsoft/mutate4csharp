@@ -43,7 +43,7 @@ authoritative behavioral contract is the read-only `../mutate4java` (`spec.md` +
 ## Deliberate departures from mutate4java (approved by Mr. Das)
 
 Default stance is **zero** behavioral departures; the CRAP-era departures do **not** apply (this is a
-mutation tool, not a complexity/CRAP analyzer). The following three are approved:
+mutation tool, not a complexity/CRAP analyzer). The following four are approved:
 
 1. **DD1 — C#-specific manifest scope kinds.** Java's 3 kinds (`class/method/field`) widen to a C#
    taxonomy (type flavors + `constructor/finalizer/operator/conversion-operator/local-function/
@@ -58,6 +58,16 @@ mutation tool, not a complexity/CRAP analyzer). The following three are approved
    filter `type!=IntegrationTests&Category!=no-mutate`, replacing mutate4java's whole-owning-module
    `mvn test -DexcludeTags=no-mutate`. `--test-command` still fully overrides (coverage → allCovered
    per spec §9).
+4. **DD4 — expression-bodied members are return sites for null-replacement.** C# `=> expr`
+   value-returning member bodies are treated as `return expr;` sites (Java `visitReturn` has no arrow
+   oracle — Java has no expression-bodied form). **Fires for:** method, property-get, indexer-get,
+   `get`-accessor, operator, conversion-operator, and non-void local-function arrow bodies.
+   **Excluded:** `set`/`init`/`add`/`remove` accessors, constructors, finalizers (structural gate on
+   the arrow-clause parent) and any `void` body (factory `IsReference` type gate). Lambdas are
+   naturally excluded (their body is not an `ArrowExpressionClause`). Guarded so each value-returning
+   body is null-replaced **exactly once** (expression-bodied and block-bodied forms are mutually
+   exclusive — the former has no `ReturnStatement`, the latter no `ArrowExpressionClause`). Surfaced by
+   the S7 independent eval; no Java oracle → documented departure. No report-string or exit-code change.
 
 Exit code `2` is therefore **broadened** to "baseline failed **OR** no unit-test project **OR** zero
 unit tests executed" — three sub-reasons documented under one code, keeping the `0/1/2/3` contract.
@@ -84,7 +94,9 @@ are excluded):
 - conditional boolean `&&` ↔ `||`
 - unary removal `!expr → expr`, `-expr → expr`
 - integer constants `0` ↔ `1`
-- reference-valued rvalues → `null` (return / initializer / assignment RHS; not call arguments)
+- reference-valued rvalues → `null` (return / initializer / **simple** assignment RHS — NOT compound
+  `+=`/`??=` RHS, matching Java `visitAssignment`=`AssignmentTree`(simple-`=`)-only with unconditional
+  recursion; **and expression-bodied value-returning member bodies per DD4**; not call arguments)
 
 Numeric-vs-reference decisions use the resolved `SemanticModel` (single-file `CSharpCompilation` with
 default framework references); C# value types (structs/enums) are non-reference — the faithful analog
@@ -128,6 +140,13 @@ node's source text; `startLine`/`endLine` from Roslyn line mapping. `addScope` d
   coverlet's Cobertura `<source>` stays a real on-disk path (the A4 key reconciles; defeats the
   deterministic-build `/_/…` remap); the executed-test count for the DD2b zero-tests gate comes from
   the baseline `.trx` (`CoverageRun.ExecutedTestCount`, a DD2b model extension).
+- **Baseline test-project scoping (all three baseline paths, DD3-consistent):** the **fresh** path
+  scopes via `CoverageRunner` (explicit `<Project>.Tests.csproj`, cwd = its dir); the **reuse** path
+  applies `WithTestProject(<absolute TestProjectFile>)` with cwd = test-project dir (S7 finding-4 fix —
+  absolute is correct here since cwd is the *real* project dir, deliberately unlike the worker path's
+  repo-root-relative form); the **`--test-command`** path runs the user command at the **workspace
+  root** (S7 finding-1 fix — aligned with the workers, which run at their repo-root copy). All three
+  therefore bind to exactly the resolved test project, never fanning out to a stray `.sln`.
 - **Coverage key (A4):** resolve each Cobertura `<class filename>` against the report `<sources>` to
   an absolute path and compare case-insensitively to the target site's absolute path; covered iff the
   `<line … hits=H>` has `H>0`. (Replaces JaCoCo package-path keying / `SourcePathNormalizer`.)

@@ -8,12 +8,14 @@ using Microsoft.Mutate4CSharp.Report;
 /// <summary>
 /// Runs (or reuses) the baseline test + coverage step and reports a failed baseline. Faithful port of
 /// mutate4java's package-private <c>BaselineRunner</c>, adapted to the C# ecosystem: on the default
-/// (fresh/reuse) paths the baseline runs with the working directory pinned to the resolved test
-/// project's own directory (DD3); on the custom <c>--test-command</c> path it runs at the
-/// workspace/repo root, the same root the per-mutant workers copy and run in, so a cwd-relative user
-/// command resolves identically for the baseline and every mutant. The coverage producer is the
-/// <see cref="ICoverageRunner"/> seam, and the reuse diagnostics no longer name a fixed JaCoCo report
-/// path.
+/// (fresh/reuse) paths the baseline is pinned to exactly one project two ways at once — the working
+/// directory is the resolved test project's own directory <em>and</em> that project is passed as the
+/// explicit <c>dotnet test</c> target (DD3), matching <see cref="CoverageRunner"/> so a stray
+/// <c>.sln</c>/second <c>.csproj</c> in that directory cannot fan the reuse baseline out; on the custom
+/// <c>--test-command</c> path it runs at the workspace/repo root, the same root the per-mutant workers
+/// copy and run in, so a cwd-relative user command resolves identically for the baseline and every
+/// mutant. The coverage producer is the <see cref="ICoverageRunner"/> seam, and the reuse diagnostics
+/// no longer name a fixed JaCoCo report path.
 /// </summary>
 public sealed class BaselineRunner
 {
@@ -59,7 +61,8 @@ public sealed class BaselineRunner
         ArgumentNullException.ThrowIfNull(executor);
         ArgumentNullException.ThrowIfNull(module);
         ArgumentNullException.ThrowIfNull(progressReporter);
-        string testProjectDirectory = TestProjectDirectory(module);
+        string testProjectFile = TestProjectFile(module);
+        string testProjectDirectory = Path.GetDirectoryName(testProjectFile)!;
         string baselineDirectory = parsed.TestCommand is null ? testProjectDirectory : _workspaceRoot;
         progressReporter.BaselineStarting(baselineDirectory);
         CoverageRun coverageRun;
@@ -67,7 +70,7 @@ public sealed class BaselineRunner
         {
             if (parsed.ReuseCoverage)
             {
-                TestRun baseline = executor.RunTests(testProjectDirectory, 0L);
+                TestRun baseline = executor.WithTestProject(testProjectFile).RunTests(testProjectDirectory, 0L);
                 CoverageRun reusedCoverage = _coverageRunner.GenerateCoverage(module, true);
                 coverageRun = new CoverageRun(
                     baseline, reusedCoverage.Report, true, reusedCoverage.ReportAvailable, 0);
@@ -106,11 +109,10 @@ public sealed class BaselineRunner
         return 2;
     }
 
-    private static string TestProjectDirectory(ModuleResolution module)
+    private static string TestProjectFile(ModuleResolution module)
     {
-        string testProjectFile = module.TestProjectFile
+        return module.TestProjectFile
             ?? throw new ArgumentException("Module resolution has no test project file.", nameof(module));
-        return Path.GetDirectoryName(testProjectFile)!;
     }
 
     private void PrintReuseMessage(bool reportAvailable)

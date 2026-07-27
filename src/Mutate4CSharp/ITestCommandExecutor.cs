@@ -33,17 +33,20 @@ public interface ITestCommandExecutor
     }
 
     /// <summary>
-    /// Returns an executor that scopes the default test command to the given test project, expressed
-    /// as a path <em>relative to the repository root</em>. During a mutation run each worker runs with
-    /// its own repo-root copy as the working directory, so a relative target resolves to the mutated
-    /// copy (<c>workerRoot/&lt;relativeTestProjectPath&gt;</c>); an absolute original-repo path would
-    /// test the un-mutated original and every mutant would silently survive. The default implementation
-    /// ignores the scoping and returns this executor unchanged, so a <c>--test-command</c> override (or
-    /// a stub) is left untouched.
+    /// Returns an executor that scopes the default test command to the given test project, passed as the
+    /// explicit <c>dotnet test</c> target. The path may be absolute or relative to the executor's working
+    /// directory; scoping to one project is what keeps <c>dotnet test</c> from fanning a directory's
+    /// <c>.sln</c>/second <c>.csproj</c> out. The <em>relative-to-the-repo-root</em> form is a property of
+    /// the per-mutant worker path specifically: each worker runs with its own repo-root copy as the
+    /// working directory, so a repo-root-relative target resolves to the mutated copy
+    /// (<c>workerRoot/&lt;testProjectPath&gt;</c>) — there an absolute original-repo path would test the
+    /// un-mutated original and every mutant would silently survive. The default implementation ignores the
+    /// scoping and returns this executor unchanged, so a <c>--test-command</c> override (or a stub) is
+    /// left untouched.
     /// </summary>
-    /// <param name="relativeTestProjectPath">The repo-root-relative path to the resolved test project.</param>
-    /// <returns>An executor scoped to <paramref name="relativeTestProjectPath"/>, or this executor if unsupported.</returns>
-    ITestCommandExecutor WithTestProject(string relativeTestProjectPath)
+    /// <param name="testProjectPath">The path to the resolved test project (absolute, or relative to the working directory).</param>
+    /// <returns>An executor scoped to <paramref name="testProjectPath"/>, or this executor if unsupported.</returns>
+    ITestCommandExecutor WithTestProject(string testProjectPath)
     {
         return this;
     }

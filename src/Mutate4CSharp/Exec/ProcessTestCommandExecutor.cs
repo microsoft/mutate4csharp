@@ -90,10 +90,10 @@ public sealed class ProcessTestCommandExecutor : ITestCommandExecutor
     }
 
     /// <inheritdoc/>
-    public ITestCommandExecutor WithTestProject(string relativeTestProjectPath)
+    public ITestCommandExecutor WithTestProject(string testProjectPath)
     {
-        ArgumentNullException.ThrowIfNull(relativeTestProjectPath);
+        ArgumentNullException.ThrowIfNull(testProjectPath);
         return new ProcessTestCommandExecutor(
-            ["dotnet", "test", relativeTestProjectPath, "--filter", UnitTestFilter]);
+            ["dotnet", "test", testProjectPath, "--filter", UnitTestFilter]);
     }
 }

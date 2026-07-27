@@ -10,8 +10,11 @@ using Microsoft.Mutate4CSharp.Model;
 /// The faithful port of mutate4java's <c>AstMutationScanner</c>: a syntax walker that visits the source
 /// tree in source order and appends every discovered <see cref="MutationSite"/> to the collector. It
 /// mirrors the Java scanner's visited shapes — boolean/integer literals, binary and prefix-unary
-/// operators, and the three reference-valued null-replacement contexts (return, variable initializer,
-/// and assignment right-value; never call arguments).
+/// operators, and the reference-valued null-replacement contexts: a block <c>return</c>, a variable
+/// initializer, and a <em>simple</em> assignment right-value (compound assignments such as <c>+=</c> or
+/// <c>??=</c> are javac's separate <c>CompoundAssignmentTree</c> and are never null-replaced; call
+/// arguments are never sites either). It additionally covers a C#-specific null-replacement context that
+/// has no Java analog — the value-returning expression-bodied (<c>=&gt; expr</c>) member body (DD4).
 /// </summary>
 /// <remarks>
 /// The walk also drives the <see cref="AstScopeTracker"/>: the <see cref="Visit(SyntaxNode)"/> override
@@ -108,9 +111,48 @@ public sealed class AstMutationScanner : CSharpSyntaxWalker
     public override void VisitAssignmentExpression(AssignmentExpressionSyntax node)
     {
         ArgumentNullException.ThrowIfNull(node);
-        Add(_siteFactory.NullReplacement(node.Right));
+        if (node.IsKind(SyntaxKind.SimpleAssignmentExpression))
+        {
+            Add(_siteFactory.NullReplacement(node.Right));
+        }
+
         base.VisitAssignmentExpression(node);
     }
+
+    /// <summary>
+    /// Null-replaces a value-returning expression-bodied (<c>=&gt; expr</c>) member body — the C#
+    /// desugaring of <c>return expr;</c> that has no Java oracle (DD4). The emit fires only when the
+    /// arrow clause's parent is a value-returning declaration (an expression-bodied method, property or
+    /// indexer implicit getter, explicit <c>get</c> accessor, non-void local function, operator, or
+    /// conversion operator); it must not fire for a <c>set</c>/<c>init</c>/<c>add</c>/<c>remove</c>
+    /// accessor, a constructor, or a finalizer, whose <c>=&gt;</c> body is a statement rather than a
+    /// return. Value-type and <c>void</c> bodies self-exclude through the factory's reference-type gate,
+    /// so only the statement-bodied parents are excluded here. The base recursion stays unconditional so
+    /// nested literal/operator sites inside every arrow body are still discovered.
+    /// </summary>
+    /// <param name="node">The arrow expression clause being visited.</param>
+    public override void VisitArrowExpressionClause(ArrowExpressionClauseSyntax node)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        if (IsValueReturningArrowBody(node.Parent))
+        {
+            Add(_siteFactory.NullReplacement(node.Expression));
+        }
+
+        base.VisitArrowExpressionClause(node);
+    }
+
+    private static bool IsValueReturningArrowBody(SyntaxNode? parent) => parent switch
+    {
+        MethodDeclarationSyntax => true,
+        PropertyDeclarationSyntax => true,
+        IndexerDeclarationSyntax => true,
+        OperatorDeclarationSyntax => true,
+        ConversionOperatorDeclarationSyntax => true,
+        LocalFunctionStatementSyntax => true,
+        AccessorDeclarationSyntax accessor => accessor.IsKind(SyntaxKind.GetAccessorDeclaration),
+        _ => false,
+    };
 
     private void Add(MutationSite? site)
     {

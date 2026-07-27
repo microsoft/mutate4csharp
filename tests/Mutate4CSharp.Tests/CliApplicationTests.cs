@@ -601,6 +601,33 @@ public sealed class CliApplicationTests : IDisposable
         baselineDirectory.Should().Be(Path.Combine(_tempDir, "tests", "Demo.Tests"));
     }
 
+    /// <summary>
+    /// Finding 4 (DD3 consistency): the reuse baseline is scoped to exactly one project two ways at once
+    /// — its working directory is the resolved test project's own directory (pinned above) <em>and</em>
+    /// that project is passed as the explicit <c>dotnet test</c> target — so a stray <c>.sln</c>/second
+    /// <c>.csproj</c> in that directory cannot fan the run out. The stub records the applied target via
+    /// <see cref="ITestCommandExecutor.WithTestProject"/>; the reuse path drives the baseline through the
+    /// executor, so the applied target is the resolved test project file.
+    /// </summary>
+    [Fact]
+    [Trait("type", "UnitTests")]
+    public void ReuseBaselineIsScopedToExplicitTestProject()
+    {
+        string file = WriteSourceFile();
+        StubCoverageRunner coverageRunner = new(true, Coverage(file, 5, 9));
+        StubExecutor executor = new(
+            new TestRun(0, "baseline ok", 10, false),
+            new TestRun(1, "killed", 5, false),
+            new TestRun(1, "killed", 6, false));
+
+        int exit = Application(new StringWriter(), new StringWriter(), executor, coverageRunner)
+            .Execute([Relative(file), "--reuse-coverage"]);
+
+        exit.Should().Be(0);
+        executor.TestProjects.TryPeek(out string? appliedTestProject).Should().BeTrue();
+        appliedTestProject.Should().Be(Path.Combine(_tempDir, "tests", "Demo.Tests", "Demo.Tests.csproj"));
+    }
+
     /// <summary>DD2: no owning C# project above the target fails fast with exit two.</summary>
     [Fact]
     [Trait("type", "UnitTests")]
@@ -756,16 +783,19 @@ public sealed class CliApplicationTests : IDisposable
 
     /// <summary>
     /// A stub <see cref="ITestCommandExecutor"/> that returns queued <see cref="TestRun"/>s and records
-    /// its invocation count, per-call timeouts, per-call working directories, and (when bound via
-    /// <see cref="WithCommand"/>) the verbatim command. Faithful analog of the Java oracle's stub: the
-    /// counter and queues are shared by reference so a <see cref="WithCommand"/>-derived instance keeps
-    /// recording into the original.
+    /// its invocation count, per-call timeouts, per-call working directories, (when bound via
+    /// <see cref="WithCommand"/>) the verbatim command, and (when bound via
+    /// <see cref="WithTestProject"/>) the applied test-project target. Faithful analog of the Java
+    /// oracle's stub: the counter and queues are shared by reference so a
+    /// <see cref="WithCommand"/>/<see cref="WithTestProject"/>-derived instance keeps recording into the
+    /// original.
     /// </summary>
     private sealed class StubExecutor : ITestCommandExecutor
     {
         private readonly ConcurrentQueue<TestRun> _runs;
         private readonly StrongBox<int> _invocations;
         private readonly string? _command;
+        private readonly string? _testProject;
 
         public StubExecutor(params TestRun[] values)
             : this(
@@ -773,7 +803,9 @@ public sealed class CliApplicationTests : IDisposable
                 new ConcurrentQueue<long>(),
                 new ConcurrentQueue<string>(),
                 new ConcurrentQueue<string>(),
+                new ConcurrentQueue<string>(),
                 new StrongBox<int>(0),
+                null,
                 null,
                 values)
         {
@@ -784,16 +816,20 @@ public sealed class CliApplicationTests : IDisposable
             ConcurrentQueue<long> timeouts,
             ConcurrentQueue<string> commands,
             ConcurrentQueue<string> directories,
+            ConcurrentQueue<string> testProjects,
             StrongBox<int> invocations,
             string? command,
+            string? testProject,
             params TestRun[] values)
         {
             _runs = runs;
             Timeouts = timeouts;
             Commands = commands;
             Directories = directories;
+            TestProjects = testProjects;
             _invocations = invocations;
             _command = command;
+            _testProject = testProject;
             foreach (TestRun value in values)
             {
                 _runs.Enqueue(value);
@@ -805,6 +841,8 @@ public sealed class CliApplicationTests : IDisposable
         public ConcurrentQueue<string> Commands { get; }
 
         public ConcurrentQueue<string> Directories { get; }
+
+        public ConcurrentQueue<string> TestProjects { get; }
 
         public int Invocations => _invocations.Value;
 
@@ -818,6 +856,11 @@ public sealed class CliApplicationTests : IDisposable
                 Commands.Enqueue(_command);
             }
 
+            if (_testProject is not null)
+            {
+                TestProjects.Enqueue(_testProject);
+            }
+
             if (!_runs.TryDequeue(out TestRun? run))
             {
                 throw new InvalidOperationException("StubExecutor exhausted its queued runs.");
@@ -828,7 +871,14 @@ public sealed class CliApplicationTests : IDisposable
 
         public ITestCommandExecutor WithCommand(string command)
         {
-            return new StubExecutor(_runs, Timeouts, Commands, Directories, _invocations, command);
+            return new StubExecutor(
+                _runs, Timeouts, Commands, Directories, TestProjects, _invocations, command, _testProject);
+        }
+
+        public ITestCommandExecutor WithTestProject(string testProjectPath)
+        {
+            return new StubExecutor(
+                _runs, Timeouts, Commands, Directories, TestProjects, _invocations, _command, testProjectPath);
         }
     }
 

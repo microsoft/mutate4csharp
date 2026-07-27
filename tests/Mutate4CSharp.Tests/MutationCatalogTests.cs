@@ -283,6 +283,215 @@ public sealed class MutationCatalogTests : IDisposable
         sites.Select(site => site.Description).Should().Equal("replace left + right with null");
     }
 
+    /// <summary>
+    /// Finding 2: null replacement fires for a <em>simple</em> assignment's right-value (and the variable
+    /// initializer and return) but never for a compound assignment's right-value. Compound kinds
+    /// (<c>+=</c>, <c>??=</c>) are javac's separate <c>CompoundAssignmentTree</c> in the Java oracle and
+    /// are never visited by <c>visitAssignment</c>; the C# port matches by guarding the emit to
+    /// <c>SimpleAssignmentExpression</c>. Were the guard absent, <c>prefix += "#"</c> would emit the
+    /// spurious <c>replace "#" with null</c> the finding calls out — so the assertion pins the exact set.
+    /// </summary>
+    [Fact]
+    [Trait("type", "UnitTests")]
+    public void NullReplacesSimpleAssignmentButNotCompoundAssignments()
+    {
+        string file = WriteSource(
+            """
+            class Assignments
+            {
+                string Simple(string source)
+                {
+                    string value = source;
+                    value = source;
+                    return value;
+                }
+
+                string Compound(string prefix, string suffix)
+                {
+                    prefix += suffix;
+                    prefix += "#";
+                    return prefix;
+                }
+
+                string Coalesce(string left, string right)
+                {
+                    left ??= right;
+                    return left;
+                }
+            }
+            """);
+
+        List<MutationSite> sites = Discover(file);
+
+        sites.Select(site => site.Description).Should().Equal(
+            "replace source with null",
+            "replace source with null",
+            "replace value with null",
+            "replace prefix with null",
+            "replace left with null");
+    }
+
+    /// <summary>
+    /// Finding 2 (recursion preserved): guarding the compound-assignment <em>emit</em> must not stop the
+    /// walker recursing into a compound assignment's children. <c>total += a * b</c> emits no
+    /// null-replacement for the right-value, yet the nested <c>*</c> binary site is still discovered — a
+    /// naive early-return-for-compound would drop it, turning over-generation into under-generation.
+    /// </summary>
+    [Fact]
+    [Trait("type", "UnitTests")]
+    public void CompoundAssignmentStillDiscoversNestedBinarySite()
+    {
+        string file = WriteSource(
+            """
+            class Nested
+            {
+                int Accumulate(int total, int a, int b)
+                {
+                    total += a * b;
+                    return total;
+                }
+            }
+            """);
+
+        List<MutationSite> sites = Discover(file);
+
+        sites.Select(site => site.Description).Should().Equal("replace * with /");
+    }
+
+    /// <summary>
+    /// Finding 3 / DD4: value-returning expression-bodied (<c>=&gt; expr</c>) members are null-replaced
+    /// just like their block-bodied <c>return expr;</c> equivalents. The fire set is an expression-bodied
+    /// method, a property implicit getter, an indexer implicit getter, an explicit <c>get</c> accessor,
+    /// and a non-void local function — each returning a reference-typed value.
+    /// </summary>
+    [Fact]
+    [Trait("type", "UnitTests")]
+    public void NullReplacesValueReturningArrowBodies()
+    {
+        string file = WriteSource(
+            """
+            class Arrows
+            {
+                private readonly string _field;
+
+                string Method(string p) => p;
+
+                string Property => _field;
+
+                string this[string key] => key;
+
+                string Explicit
+                {
+                    get => _field;
+                }
+
+                string Local(string p)
+                {
+                    string Inner() => p;
+                    return Inner();
+                }
+            }
+            """);
+
+        List<MutationSite> sites = Discover(file);
+
+        sites.Select(site => site.Description).Should().Equal(
+            "replace p with null",
+            "replace _field with null",
+            "replace key with null",
+            "replace _field with null",
+            "replace p with null",
+            "replace Inner() with null");
+    }
+
+    /// <summary>
+    /// Finding 3 / DD4 (operator + conversion arms): an expression-bodied operator and conversion
+    /// operator each return a value and so fire, while the constructor's arrow body — a statement, not a
+    /// return — does not (its only site is the legitimate simple-assignment right-value, never a
+    /// whole-assignment null replacement).
+    /// </summary>
+    [Fact]
+    [Trait("type", "UnitTests")]
+    public void NullReplacesOperatorAndConversionArrowBodies()
+    {
+        string file = WriteSource(
+            """
+            class Wrapper
+            {
+                private readonly string _value;
+
+                Wrapper(string value) => _value = value;
+
+                public static string operator +(Wrapper left, Wrapper right) => left._value;
+
+                public static implicit operator string(Wrapper wrapper) => wrapper._value;
+            }
+            """);
+
+        List<MutationSite> sites = Discover(file);
+
+        sites.Select(site => site.Description).Should().Equal(
+            "replace value with null",
+            "replace left._value with null",
+            "replace wrapper._value with null");
+    }
+
+    /// <summary>
+    /// Finding 3 / DD4 (don't-fire boundary): a <c>set</c>/<c>init</c> accessor, a <c>void</c> method, a
+    /// constructor, and a finalizer whose <c>=&gt;</c> body is a statement must not be null-replaced.
+    /// Their only sites are the legitimate simple-assignment right-values reached by ordinary recursion;
+    /// the spurious whole-assignment <c>replace _stored = value with null</c> that a wrongly-firing arrow
+    /// visitor would emit never appears, and the <c>void</c> method self-excludes on its return type.
+    /// </summary>
+    [Fact]
+    [Trait("type", "UnitTests")]
+    public void DoesNotNullReplaceStatementArrowBodies()
+    {
+        string file = WriteSource(
+            """
+            class Sink
+            {
+                private string _stored;
+
+                string Writable
+                {
+                    set => _stored = value;
+                }
+
+                string Initable
+                {
+                    init => _stored = value;
+                }
+
+                void Store(string p) => Keep(p);
+
+                Sink(string p) => _stored = p;
+
+                ~Sink() => Reset();
+
+                void Keep(string p)
+                {
+                    _stored = p;
+                }
+
+                void Reset()
+                {
+                    _stored = null;
+                }
+            }
+            """);
+
+        List<MutationSite> sites = Discover(file);
+
+        List<string> descriptions = [.. sites.Select(site => site.Description)];
+        descriptions.Should().Equal(
+            "replace value with null",
+            "replace value with null",
+            "replace p with null",
+            "replace p with null");
+        descriptions.Should().NotContain(description => description.Contains('=', StringComparison.Ordinal));
+    }
+
     private static List<MutationSite> Discover(string file)
     {
         return [.. new MutationCatalog().Discover([file])];
