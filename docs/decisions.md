@@ -144,6 +144,10 @@ node's source text; `startLine`/`endLine` from Roslyn line mapping. `addScope` d
   `StringComparer.Ordinal` (UTF-16 ordinal) — never a culture/invariant comparer. A culture comparer
   would silently reorder and change hash-affecting order (manifest module hash, and later
   selection/report ordering). Applies to all string ordering across the port.
+- **Record mapping (by semantics, not keyword):** a Java `record`/`final class` used as a **value
+  carrier** → C# `record`; one used as a **reference-identity resource/handle** (e.g. `CoverageReport`,
+  `WorkerWorkspaces`) → C# `sealed class` (a record over `IReadOnlyList`/handle fields would emit a
+  misleading reference-based `Equals` nobody should call).
 - **Greenlit engineering (behavior-neutral):** P1 single Roslyn walk (sites + scopes together); P2
   `record struct` for the tiny hot keys (`CoverageSite`, `ScopeRef`); P3 `Channel<MutationJob>` worker
   pool with identical scheduling semantics.

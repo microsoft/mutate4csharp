@@ -168,6 +168,11 @@ S8 only once the entire port is merged and pushed.**
   `printReuseMessage`. Apply the DD2b `executed==0 → exit 2` gate **only** on the normal coverage path
   (reuse + `--test-command` are exempt — no fresh TRX). In the reuse / `--test-command` baseline paths,
   run the project-less executor with **cwd = test-project dir** so it still binds to `<Project>.Tests`.
+- **Carry-forward — T14/T15 mutated-file base (Anders, T13 review):** relativize `MutationSite.File`
+  against **`copyRoot` == repo root** (the workspace-copy base) so `workerRoot / relativePath` lands on
+  the copied file; T14 job construction + `CreateWorkerWorkspaces(copyRoot, …)` must share the repo
+  root as the single base. T14 keeps `WorkerWorkspaces` a **`sealed class`** (resource handle, not a
+  value — Anders' ruling).
 - **`.gitignore` convention (Anders, T8 review):** anchor project-specific, root-scoped output dir
   names (`/coverage/`; `/artifacts/` if the .NET-8 artifacts layout is later adopted); keep genuine
   build-output names (`bin`/`obj`/`Debug`/`Release`) depth-agnostic (unanchored). No proactive sweep.
@@ -190,6 +195,7 @@ Per-task log (Dave implements → Bhaskar verifies → Anders reviews → JARVIS
 | T10 | Done | ✅ | ✅ | ✅ |
 | T11 | Done | ✅ | ✅ | ✅ |
 | T12 | Done | ✅ | ✅ | ✅ |
+| T13 | Done | ✅ | ✅ | ✅ |
 
 **Slices:** S1 ✅ · S2 ✅ · S3 (selection/coverage/report) ✅ · S4 (exec/workers) in progress.
 - **Carry-forward — T11 `ProcessCommandExecutor` (Anders, T9 review):** `ICommandExecutor.Run` takes
