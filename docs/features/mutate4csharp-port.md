@@ -146,6 +146,16 @@ S8 only once the entire port is merged and pushed.**
   stamped on `CurrentScope` but has **no** manifest entry; when the differential selector consumes
   `ScopeId`, a `file:`-scoped site (no matching manifest scope) must degrade gracefully
   (conservative-select), mirroring Java's tolerance of its `"unknown"` default.
+- **Carry-forward — T12/T16 coverage reconciliation (Anders, T8 review):** `NormalizeSourcePath`
+  (`GetFullPath`) does NOT undo deterministic-build path remapping (`DeterministicSourcePaths`/`PathMap`/
+  SourceLink → `/_/…` placeholders), symlinks, or a relative-vs-CWD basis — any of which makes
+  coverlet's `<source>` fail to reconcile with on-disk site paths → all-uncovered. T12's coverage run
+  should control `DeterministicSourcePaths` (a real on-disk `<source>`); **T16 must be an end-to-end
+  reconciliation test on a REAL coverlet report** (not synthetic XML), asserting a known-covered line's
+  key is present. T10 must call `NormalizeSourcePath(MutationSite.File)` exactly once at the boundary.
+- **`.gitignore` convention (Anders, T8 review):** anchor project-specific, root-scoped output dir
+  names (`/coverage/`; `/artifacts/` if the .NET-8 artifacts layout is later adopted); keep genuine
+  build-output names (`bin`/`obj`/`Debug`/`Release`) depth-agnostic (unanchored). No proactive sweep.
 
 ## Progress
 
@@ -160,5 +170,6 @@ Per-task log (Dave implements → Bhaskar verifies → Anders reviews → JARVIS
 | T5 | Done | ✅ | ✅ | ✅ |
 | T6 | Done | ✅ | ✅ | ✅ |
 | T7 | Done | ✅ | ✅ | ✅ |
+| T8 | Done | ✅ | ✅ | ✅ |
 
-**Slices:** S1 (T1–T4, pure foundation) ✅ complete · S2 (Roslyn engine) in progress.
+**Slices:** S1 ✅ · S2 (Roslyn engine) ✅ · S3 (selection/coverage/report) in progress.

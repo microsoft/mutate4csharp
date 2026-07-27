@@ -25,7 +25,7 @@ project.lock.json
 ## Test / coverage output
 [Tt]est[Rr]esult*/
 TestResults/
-coverage/
+/coverage/
 coverage*.json
 coverage*.xml
 coverage*.info
