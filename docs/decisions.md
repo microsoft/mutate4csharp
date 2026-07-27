@@ -114,7 +114,10 @@ node's source text; `startLine`/`endLine` from Roslyn line mapping. `addScope` d
   `-DexcludeTags=no-mutate`. `--test-command` overrides entirely (then coverage = allCovered).
 - **Baseline + coverage** come from one `dotnet test --collect` call; the runner reads the newest
   `coverage.cobertura.xml` under the results dir. `--reuse-coverage` reuses it; missing → continue
-  without filtering (spec §9).
+  without filtering (spec §9). The coverage run passes **`-p:DeterministicSourcePaths=false`** so
+  coverlet's Cobertura `<source>` stays a real on-disk path (the A4 key reconciles; defeats the
+  deterministic-build `/_/…` remap); the executed-test count for the DD2b zero-tests gate comes from
+  the baseline `.trx` (`CoverageRun.ExecutedTestCount`, a DD2b model extension).
 - **Coverage key (A4):** resolve each Cobertura `<class filename>` against the report `<sources>` to
   an absolute path and compare case-insensitively to the target site's absolute path; covered iff the
   `<line … hits=H>` has `H>0`. (Replaces JaCoCo package-path keying / `SourcePathNormalizer`.)

@@ -161,6 +161,13 @@ S8 only once the entire port is merged and pushed.**
   T12/T15 MUST invoke the executor with **working directory = `Path.GetDirectoryName(TestProjectFile)`**
   (or append the explicit `<Project>.Tests.csproj`) so `dotnet test` binds to exactly that one project.
   Also carry the CA1849 pattern (`await Task.WhenAll(...)` + index, not `.Result`) into T12/T14.
+- **Carry-forward — T15 coverage gating (Anders, T12 review, CRITICAL):** pass `CoverageRun.Report`
+  (even the empty reuse-missing report) **straight** to the planner (like Java `CliExecution`); do
+  **NOT** gate the coverage filter on `ReportAvailable`. Java runs **zero** mutants on reuse-missing
+  (empty report → covered=∅ → all `UNCOVERED`, summary `0 total`); `ReportAvailable` drives **only**
+  `printReuseMessage`. Apply the DD2b `executed==0 → exit 2` gate **only** on the normal coverage path
+  (reuse + `--test-command` are exempt — no fresh TRX). In the reuse / `--test-command` baseline paths,
+  run the project-less executor with **cwd = test-project dir** so it still binds to `<Project>.Tests`.
 - **`.gitignore` convention (Anders, T8 review):** anchor project-specific, root-scoped output dir
   names (`/coverage/`; `/artifacts/` if the .NET-8 artifacts layout is later adopted); keep genuine
   build-output names (`bin`/`obj`/`Debug`/`Release`) depth-agnostic (unanchored). No proactive sweep.
@@ -182,6 +189,7 @@ Per-task log (Dave implements → Bhaskar verifies → Anders reviews → JARVIS
 | T9 | Done | ✅ | ✅ | ✅ |
 | T10 | Done | ✅ | ✅ | ✅ |
 | T11 | Done | ✅ | ✅ | ✅ |
+| T12 | Done | ✅ | ✅ | ✅ |
 
 **Slices:** S1 ✅ · S2 ✅ · S3 (selection/coverage/report) ✅ · S4 (exec/workers) in progress.
 - **Carry-forward — T11 `ProcessCommandExecutor` (Anders, T9 review):** `ICommandExecutor.Run` takes
