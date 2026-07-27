@@ -20,9 +20,12 @@ using Microsoft.Mutate4CSharp.Report;
 /// oracle (adapted to the C# target: <c>src/Demo/Sample.cs</c> paths, the <c>.cs</c> message, and the
 /// A4 absolute-path coverage key); four additional cases cover the approved DD2 fail-fast departures
 /// (no owning project, no test project, and the DD2(b) zero-executed-tests gate — plus its reuse-path
-/// exemption). mutate4java's <c>moduleRootFor</c>/<c>sourceSuffix</c> pass-through tests are dropped:
-/// those methods do not exist in the C# layout (their responsibilities moved to <c>ModuleResolver</c>
-/// and <c>CoberturaLineCoverageParser.NormalizeSourcePath</c>, each covered by their own unit tests).
+/// exemption), and two more pin Mr. Das' baseline/worker cwd-alignment ruling (the custom
+/// <c>--test-command</c> baseline runs at the workspace root; the default path keeps the DD3
+/// test-project directory). mutate4java's <c>moduleRootFor</c>/<c>sourceSuffix</c> pass-through tests
+/// are dropped: those methods do not exist in the C# layout (their responsibilities moved to
+/// <c>ModuleResolver</c> and <c>CoberturaLineCoverageParser.NormalizeSourcePath</c>, each covered by
+/// their own unit tests).
 /// </summary>
 public sealed class CliApplicationTests : IDisposable
 {
@@ -550,6 +553,54 @@ public sealed class CliApplicationTests : IDisposable
         executor.Commands.Should().Equal(CustomTestCommand, CustomTestCommand, CustomTestCommand);
     }
 
+    /// <summary>
+    /// Mr. Das' ruling: on the <c>--test-command</c> path the baseline runs at the workspace/repo root
+    /// — the same root the per-mutant workers copy and run in — so a cwd-relative user command resolves
+    /// identically for the baseline and every mutant (not the resolved test-project directory).
+    /// </summary>
+    [Fact]
+    [Trait("type", "UnitTests")]
+    public void RunsCustomTestCommandBaselineFromWorkspaceRoot()
+    {
+        string file = WriteSourceFile();
+        StubExecutor executor = new(
+            new TestRun(0, "baseline ok", 10, false),
+            new TestRun(1, "killed", 5, false),
+            new TestRun(1, "killed", 6, false));
+
+        int exit = Application(new StringWriter(), new StringWriter(), executor, new StubCoverageRunner(EmptyCoverage()))
+            .Execute([Relative(file), "--test-command", CustomTestCommand]);
+
+        exit.Should().Be(0);
+        executor.Directories.TryPeek(out string? baselineDirectory).Should().BeTrue();
+        baselineDirectory.Should().Be(_tempDir);
+    }
+
+    /// <summary>
+    /// Guard: the default (<c>TestCommand is null</c>) path keeps the DD3 binding — the baseline runs
+    /// from the resolved test project's own directory, unchanged by the <c>--test-command</c> fix. The
+    /// reuse path is used because it drives the baseline through the executor (the fresh path produces
+    /// the baseline via the coverage runner).
+    /// </summary>
+    [Fact]
+    [Trait("type", "UnitTests")]
+    public void RunsDefaultBaselineFromTestProjectDirectory()
+    {
+        string file = WriteSourceFile();
+        StubCoverageRunner coverageRunner = new(true, Coverage(file, 5, 9));
+        StubExecutor executor = new(
+            new TestRun(0, "baseline ok", 10, false),
+            new TestRun(1, "killed", 5, false),
+            new TestRun(1, "killed", 6, false));
+
+        int exit = Application(new StringWriter(), new StringWriter(), executor, coverageRunner)
+            .Execute([Relative(file), "--reuse-coverage"]);
+
+        exit.Should().Be(0);
+        executor.Directories.TryPeek(out string? baselineDirectory).Should().BeTrue();
+        baselineDirectory.Should().Be(Path.Combine(_tempDir, "tests", "Demo.Tests"));
+    }
+
     /// <summary>DD2: no owning C# project above the target fails fast with exit two.</summary>
     [Fact]
     [Trait("type", "UnitTests")]
@@ -705,9 +756,10 @@ public sealed class CliApplicationTests : IDisposable
 
     /// <summary>
     /// A stub <see cref="ITestCommandExecutor"/> that returns queued <see cref="TestRun"/>s and records
-    /// its invocation count, per-call timeouts, and (when bound via <see cref="WithCommand"/>) the
-    /// verbatim command. Faithful analog of the Java oracle's stub: the counter and queues are shared
-    /// by reference so a <see cref="WithCommand"/>-derived instance keeps recording into the original.
+    /// its invocation count, per-call timeouts, per-call working directories, and (when bound via
+    /// <see cref="WithCommand"/>) the verbatim command. Faithful analog of the Java oracle's stub: the
+    /// counter and queues are shared by reference so a <see cref="WithCommand"/>-derived instance keeps
+    /// recording into the original.
     /// </summary>
     private sealed class StubExecutor : ITestCommandExecutor
     {
@@ -720,6 +772,7 @@ public sealed class CliApplicationTests : IDisposable
                 new ConcurrentQueue<TestRun>(),
                 new ConcurrentQueue<long>(),
                 new ConcurrentQueue<string>(),
+                new ConcurrentQueue<string>(),
                 new StrongBox<int>(0),
                 null,
                 values)
@@ -730,6 +783,7 @@ public sealed class CliApplicationTests : IDisposable
             ConcurrentQueue<TestRun> runs,
             ConcurrentQueue<long> timeouts,
             ConcurrentQueue<string> commands,
+            ConcurrentQueue<string> directories,
             StrongBox<int> invocations,
             string? command,
             params TestRun[] values)
@@ -737,6 +791,7 @@ public sealed class CliApplicationTests : IDisposable
             _runs = runs;
             Timeouts = timeouts;
             Commands = commands;
+            Directories = directories;
             _invocations = invocations;
             _command = command;
             foreach (TestRun value in values)
@@ -749,12 +804,15 @@ public sealed class CliApplicationTests : IDisposable
 
         public ConcurrentQueue<string> Commands { get; }
 
+        public ConcurrentQueue<string> Directories { get; }
+
         public int Invocations => _invocations.Value;
 
         public TestRun RunTests(string projectRoot, long timeoutMillis)
         {
             Interlocked.Increment(ref _invocations.Value);
             Timeouts.Enqueue(timeoutMillis);
+            Directories.Enqueue(projectRoot);
             if (_command is not null)
             {
                 Commands.Enqueue(_command);
@@ -770,7 +828,7 @@ public sealed class CliApplicationTests : IDisposable
 
         public ITestCommandExecutor WithCommand(string command)
         {
-            return new StubExecutor(_runs, Timeouts, Commands, _invocations, command);
+            return new StubExecutor(_runs, Timeouts, Commands, Directories, _invocations, command);
         }
     }
 

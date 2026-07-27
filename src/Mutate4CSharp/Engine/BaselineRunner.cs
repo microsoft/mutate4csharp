@@ -7,27 +7,37 @@ using Microsoft.Mutate4CSharp.Report;
 
 /// <summary>
 /// Runs (or reuses) the baseline test + coverage step and reports a failed baseline. Faithful port of
-/// mutate4java's package-private <c>BaselineRunner</c>, adapted to the C# ecosystem: the baseline runs
-/// with the working directory pinned to the resolved test project's own directory (DD3), the coverage
-/// producer is the <see cref="ICoverageRunner"/> seam, and the reuse diagnostics no longer name a
-/// fixed JaCoCo report path.
+/// mutate4java's package-private <c>BaselineRunner</c>, adapted to the C# ecosystem: on the default
+/// (fresh/reuse) paths the baseline runs with the working directory pinned to the resolved test
+/// project's own directory (DD3); on the custom <c>--test-command</c> path it runs at the
+/// workspace/repo root, the same root the per-mutant workers copy and run in, so a cwd-relative user
+/// command resolves identically for the baseline and every mutant. The coverage producer is the
+/// <see cref="ICoverageRunner"/> seam, and the reuse diagnostics no longer name a fixed JaCoCo report
+/// path.
 /// </summary>
 public sealed class BaselineRunner
 {
     private readonly ICoverageRunner _coverageRunner;
     private readonly TextWriter _err;
+    private readonly string _workspaceRoot;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BaselineRunner"/> class.
     /// </summary>
     /// <param name="coverageRunner">The coverage runner used on the fresh and reuse paths.</param>
     /// <param name="error">The writer baseline-failure and reuse diagnostics are printed to.</param>
-    public BaselineRunner(ICoverageRunner coverageRunner, TextWriter error)
+    /// <param name="workspaceRoot">
+    /// The repo/workspace root the per-mutant workers copy and run in; the working directory for the
+    /// custom <c>--test-command</c> baseline path.
+    /// </param>
+    public BaselineRunner(ICoverageRunner coverageRunner, TextWriter error, string workspaceRoot)
     {
         ArgumentNullException.ThrowIfNull(coverageRunner);
         ArgumentNullException.ThrowIfNull(error);
+        ArgumentNullException.ThrowIfNull(workspaceRoot);
         _coverageRunner = coverageRunner;
         _err = error;
+        _workspaceRoot = workspaceRoot;
     }
 
     /// <summary>
@@ -50,7 +60,8 @@ public sealed class BaselineRunner
         ArgumentNullException.ThrowIfNull(module);
         ArgumentNullException.ThrowIfNull(progressReporter);
         string testProjectDirectory = TestProjectDirectory(module);
-        progressReporter.BaselineStarting(testProjectDirectory);
+        string baselineDirectory = parsed.TestCommand is null ? testProjectDirectory : _workspaceRoot;
+        progressReporter.BaselineStarting(baselineDirectory);
         CoverageRun coverageRun;
         if (parsed.TestCommand is null)
         {
@@ -70,7 +81,7 @@ public sealed class BaselineRunner
         else
         {
             coverageRun = new CoverageRun(
-                executor.RunTests(testProjectDirectory, 0L), CoverageReport.AllCovered(), false, false, 0);
+                executor.RunTests(_workspaceRoot, 0L), CoverageReport.AllCovered(), false, false, 0);
         }
 
         progressReporter.BaselineFinished(coverageRun.Baseline!);

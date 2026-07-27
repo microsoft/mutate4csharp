@@ -91,6 +91,21 @@ public sealed class MainAcceptanceTests : IDisposable
         }
         """;
 
+    private const string SingleAddKillingTestSource =
+        """
+        using Sample;
+        using Xunit;
+
+        public sealed class CalculatorTests
+        {
+            [Fact]
+            public void AddIsExact()
+            {
+                Assert.Equal(5, Calculator.Add(2, 3));
+            }
+        }
+        """;
+
     private const string IntegrationOnlyTestSource =
         """
         using Xunit;
@@ -151,6 +166,22 @@ public sealed class MainAcceptanceTests : IDisposable
         + "Coverage: 1 uncovered sites skipped.\n"
         + "Summary: 0 killed, 0 survived, 0 total.\n";
 
+    // The --test-command path treats every site as covered (no coverage run), so the single Add
+    // mutant is covered and killed by the custom command.
+    private const string ExpectedCustomCommandKilledReport =
+        "Baseline tests passed in <N> ms.\n"
+        + "Total mutation sites: 1\n"
+        + "Covered mutation sites: 1\n"
+        + "Uncovered mutation sites: 0\n"
+        + "Changed mutation sites: 0\n"
+        + "Manifest exists: false\n"
+        + "Module hash changed: false\n"
+        + "Differential surface area: 0\n"
+        + "Manifest-violating surface area: 0\n"
+        + "KILLED Sample/Calculator.cs:7 replace + with - (<N> ms)\n"
+        + "Coverage: 0 uncovered sites skipped.\n"
+        + "Summary: 1 killed, 0 survived, 1 total.\n";
+
     private TestProject? _project;
 
     /// <summary>
@@ -207,6 +238,45 @@ public sealed class MainAcceptanceTests : IDisposable
         NormalizeDurations(result.StandardOutput).Should().Be(ExpectedUncoveredReport);
         File.ReadAllText(_project.ProductionFile("Calculator.cs"))
             .Should().Contain("mutate4csharp-manifest", "an exit-0 run stamps the module manifest into the source");
+    }
+
+    /// <summary>
+    /// Locks Mr. Das' baseline/worker cwd-alignment ruling end-to-end: a <c>--test-command</c> whose
+    /// test-project path is relative to the workspace/repo root drives a clean all-killed run (exit 0
+    /// with the byte-verbatim §13 report). This is CAUSAL to the fix — the custom command
+    /// <c>dotnet test Sample.Tests/Sample.Tests.csproj</c> only resolves when it runs from the
+    /// workspace root. With the fix the baseline runs at the workspace root (aligned with the
+    /// per-mutant workers, which run from their repo-root copies), so the relative project path
+    /// resolves, the baseline passes, and the worker kills the mutant. Under the OLD bug the baseline
+    /// ran from the resolved test-project directory, where <c>Sample.Tests/Sample.Tests.csproj</c>
+    /// does NOT resolve, so <c>dotnet test</c> would fail and the tool would exit 2 (failed baseline).
+    /// A clean exit-0 all-killed run therefore proves both the baseline and the workers ran the
+    /// command from the aligned workspace root.
+    /// </summary>
+    [Fact]
+    [Trait("type", "IntegrationTests")]
+    public void CustomTestCommandRunsFromWorkspaceRootAndKillsMutant()
+    {
+        _project = new TestProjectFactory()
+            .WithProductionFile("Calculator.cs", SingleAddSource)
+            .WithTestFile("CalculatorTests.cs", SingleAddKillingTestSource)
+            .Create();
+
+        // Repo-root-relative test-project path: this is what makes the test causal — it resolves only
+        // from the workspace root (the aligned cwd the fix pins for the baseline), never from the
+        // resolved test-project directory the old baseline used.
+        string relativeTestProject = _project.RelativeToRoot(_project.TestProjectFile).Replace('\\', '/');
+        string testCommand = "dotnet test " + relativeTestProject;
+
+        ToolResult result = RunTool(
+            _project.Root, ProductionArgument(_project, "Calculator.cs"), "--test-command", testCommand);
+
+        string because =
+            "the repo-root-relative --test-command resolves only when the baseline runs from the aligned "
+            + "workspace root; a failed baseline would exit 2. stderr was:\n" + result.StandardError;
+        result.ExitCode.Should().Be(0, because);
+        result.StandardError.Should().BeEmpty();
+        NormalizeDurations(result.StandardOutput).Should().Be(ExpectedCustomCommandKilledReport);
     }
 
     /// <summary>

@@ -87,7 +87,7 @@ public sealed class CliExecution
         _verboseProgressReporter = verboseProgressReporter;
         _catalog = catalog;
         _layout = layout;
-        _baselineRunner = new BaselineRunner(coverageRunner, error);
+        _baselineRunner = new BaselineRunner(coverageRunner, error, workspaceRoot);
         LineFilter lineFilter = new();
         _mutationRunPlanner = new MutationRunPlanner(
             selector, coverageFilter, mutationExecution, new ExecutionMessages(), lineFilter);
