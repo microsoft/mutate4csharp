@@ -23,10 +23,17 @@ jobs:
       - name: Build (Release, warnings-as-errors)
         run: dotnet build mutate4csharp.sln --configuration Release --no-restore
 
-      - name: Test (with coverage)
+      - name: Unit tests (with coverage)
         run: >
           dotnet test mutate4csharp.sln --configuration Release --no-build
+          --filter "type!=IntegrationTests"
           --collect:"XPlat Code Coverage" --results-directory coverage
+
+      - name: Integration tests
+        run: >
+          dotnet test mutate4csharp.sln --configuration Release --no-build
+          --filter "type=IntegrationTests"
+          --results-directory coverage-it
 
       - name: Upload coverage
         if: always()
