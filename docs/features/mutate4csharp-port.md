@@ -171,5 +171,10 @@ Per-task log (Dave implements → Bhaskar verifies → Anders reviews → JARVIS
 | T6 | Done | ✅ | ✅ | ✅ |
 | T7 | Done | ✅ | ✅ | ✅ |
 | T8 | Done | ✅ | ✅ | ✅ |
+| T9 | Done | ✅ | ✅ | ✅ |
 
 **Slices:** S1 ✅ · S2 (Roslyn engine) ✅ · S3 (selection/coverage/report) in progress.
+- **Carry-forward — T11 `ProcessCommandExecutor` (Anders, T9 review):** `ICommandExecutor.Run` takes
+  **argv** (`command[0]` = exe) — spawn via `Process.StartInfo.FileName` + `ArgumentList`, NOT a shell
+  string; **merge stderr into `Output`** (Java `redirectErrorStream(true)` analog); set `TimedOut` /
+  `DurationMillis`.
