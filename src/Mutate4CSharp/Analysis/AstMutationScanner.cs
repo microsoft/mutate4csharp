@@ -14,14 +14,15 @@ using Microsoft.Mutate4CSharp.Model;
 /// and assignment right-value; never call arguments).
 /// </summary>
 /// <remarks>
-/// The Java scanner also drove the scope tracker (entering/exiting types and recording member scopes) as
-/// it walked; that scope wiring is owned by the scope-tracker task and layered on top of this
-/// site-emitting walk.
+/// The walk also drives the <see cref="AstScopeTracker"/>: the <see cref="Visit(SyntaxNode)"/> override
+/// enters each scope-defining declaration before its subtree and exits after, so every site the factory
+/// builds is stamped with its enclosing DD1 scope.
 /// </remarks>
 public sealed class AstMutationScanner : CSharpSyntaxWalker
 {
     private readonly List<MutationSite> _sites = [];
     private readonly AstMutationSiteFactory _siteFactory;
+    private readonly AstScopeTracker _scopeTracker;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AstMutationScanner"/> class.
@@ -32,13 +33,36 @@ public sealed class AstMutationScanner : CSharpSyntaxWalker
     public AstMutationScanner(string file, CompilationUnitSyntax root, SemanticModel semanticModel)
     {
         ArgumentNullException.ThrowIfNull(root);
-        _siteFactory = new AstMutationSiteFactory(file, root.SyntaxTree, semanticModel);
+        _scopeTracker = new AstScopeTracker(file, root.SyntaxTree);
+        _siteFactory = new AstMutationSiteFactory(file, root.SyntaxTree, semanticModel, _scopeTracker);
     }
 
     /// <summary>
     /// Gets the mutation sites discovered so far, in source (visit) order.
     /// </summary>
     public IReadOnlyList<MutationSite> Sites => _sites;
+
+    /// <summary>
+    /// Gets the mutation scopes discovered so far, in first-seen (visit) order.
+    /// </summary>
+    public IReadOnlyList<MutationScope> Scopes => _scopeTracker.Scopes;
+
+    /// <summary>
+    /// Brackets every scope-defining declaration around the walk of its subtree — entering the scope
+    /// before its children are visited and exiting after — so the scope tracker always reflects the
+    /// enclosing scope of the site currently being built. This single choke point layers the DD1 scope
+    /// taxonomy onto the site-emitting walk without altering the per-shape visit overrides below.
+    /// </summary>
+    /// <param name="node">The node being visited.</param>
+    public override void Visit(SyntaxNode? node)
+    {
+        bool entered = node is not null && _scopeTracker.TryEnter(node);
+        base.Visit(node);
+        if (entered)
+        {
+            _scopeTracker.Exit();
+        }
+    }
 
     /// <inheritdoc/>
     public override void VisitLiteralExpression(LiteralExpressionSyntax node)

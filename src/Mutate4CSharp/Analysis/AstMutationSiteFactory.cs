@@ -16,16 +16,17 @@ using Microsoft.Mutate4CSharp.Model;
 /// <remarks>
 /// Where Java located operator text with a substring scan between the operands, Roslyn exposes the
 /// operator token span directly, so this reads <see cref="BinaryExpressionSyntax.OperatorToken"/> and
-/// <see cref="PrefixUnaryExpressionSyntax.OperatorToken"/> spans — cleaner, same result. Java resolved
-/// each site's enclosing scope through the scope tracker; that wiring (and the emitted scope metadata)
-/// is owned by the scope-tracker task, so this stage emits sites with the line-scoped default and the
-/// scope tracker is layered on later.
+/// <see cref="PrefixUnaryExpressionSyntax.OperatorToken"/> spans — cleaner, same result. As in Java,
+/// each site's enclosing scope is resolved through the injected <see cref="AstScopeTracker"/>: the
+/// single <c>BuildSite</c> construction point stamps every site with the tracker's current scope
+/// (id, kind, and line range).
 /// </remarks>
 public sealed class AstMutationSiteFactory
 {
     private readonly string _file;
     private readonly SyntaxTree _tree;
     private readonly TreeTypePredicates _typePredicates;
+    private readonly AstScopeTracker _scopeTracker;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AstMutationSiteFactory"/> class.
@@ -33,14 +34,17 @@ public sealed class AstMutationSiteFactory
     /// <param name="file">The source file path recorded on each emitted site.</param>
     /// <param name="tree">The parsed syntax tree, used for line-number mapping.</param>
     /// <param name="semanticModel">The resolved semantic model backing the type predicates.</param>
-    public AstMutationSiteFactory(string file, SyntaxTree tree, SemanticModel semanticModel)
+    /// <param name="scopeTracker">The scope tracker supplying each site's enclosing scope metadata.</param>
+    public AstMutationSiteFactory(string file, SyntaxTree tree, SemanticModel semanticModel, AstScopeTracker scopeTracker)
     {
         ArgumentNullException.ThrowIfNull(file);
         ArgumentNullException.ThrowIfNull(tree);
         ArgumentNullException.ThrowIfNull(semanticModel);
+        ArgumentNullException.ThrowIfNull(scopeTracker);
         _file = file;
         _tree = tree;
         _typePredicates = new TreeTypePredicates(semanticModel);
+        _scopeTracker = scopeTracker;
     }
 
     /// <summary>
@@ -142,6 +146,7 @@ public sealed class AstMutationSiteFactory
     private MutationSite BuildSite(int start, int end, string original, string replacement, string description)
     {
         int lineNumber = _tree.GetLineSpan(TextSpan.FromBounds(start, start)).StartLinePosition.Line + 1;
-        return new MutationSite(_file, lineNumber, start, end, original, replacement, description);
+        ScopeRef scope = _scopeTracker.CurrentScope;
+        return new MutationSite(_file, lineNumber, start, end, original, replacement, description, scope.Id, scope.Kind, scope.StartLine, scope.EndLine);
     }
 }

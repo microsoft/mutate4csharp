@@ -7,9 +7,9 @@ using Microsoft.Mutate4CSharp.Model;
 /// Faithful counterpart of mutate4java's <c>MutationCatalogTest</c>: the oracle for the AST mutation-site
 /// scanner. Each case ports a Java source verbatim to its C# equivalent and asserts the same discovered
 /// mutation set — count, source order, replacement-description strings, and replacement text — so the C#
-/// port reproduces the Java behavior exactly. Site discovery is driven directly through the T6 scanner
-/// (the <c>MutationCatalog.discover</c> aggregator and its scope wiring are a later task); the local
-/// <see cref="Discover"/> helper reproduces the Java aggregator's file-then-start ordering.
+/// port reproduces the Java behavior exactly. Discovery is driven through <see cref="MutationCatalog"/>,
+/// exactly as the Java test drives <c>new MutationCatalog().discover(...)</c>; real DD1 scope metadata
+/// now flows through every site, and these assertions confirm the site set is unchanged by it.
 /// </summary>
 public sealed class MutationCatalogTests : IDisposable
 {
@@ -285,15 +285,7 @@ public sealed class MutationCatalogTests : IDisposable
 
     private static List<MutationSite> Discover(string file)
     {
-        CompiledSource compiled = new RoslynSourceCompiler().Compile(file);
-        AstMutationScanner scanner = new(file, compiled.Root, compiled.SemanticModel);
-        scanner.Visit(compiled.Root);
-        return
-        [
-            .. scanner.Sites
-                .OrderBy(site => site.File, StringComparer.Ordinal)
-                .ThenBy(site => site.Start),
-        ];
+        return [.. new MutationCatalog().Discover([file])];
     }
 
     private string WriteSource(string source)

@@ -142,6 +142,10 @@ S8 only once the entire port is merged and pushed.**
   `Program.Main(args)` → `Cli.Main.run(...)` → `CliApplication.execute` + `ExitIfNeeded`; do **not**
   make `Cli.Main` an entry point. Treat `ParseOutcome.ExitCode == -1` as "continue with `Arguments`",
   distinct from `0` (help success) — the faithful magic-number contract.
+- **Carry-forward — S3/selection (Anders, T7 review):** the synthetic `file:` fallback scope is
+  stamped on `CurrentScope` but has **no** manifest entry; when the differential selector consumes
+  `ScopeId`, a `file:`-scoped site (no matching manifest scope) must degrade gracefully
+  (conservative-select), mirroring Java's tolerance of its `"unknown"` default.
 
 ## Progress
 
@@ -155,5 +159,6 @@ Per-task log (Dave implements → Bhaskar verifies → Anders reviews → JARVIS
 | T4 | Done | ✅ | ✅ | ✅ |
 | T5 | Done | ✅ | ✅ | ✅ |
 | T6 | Done | ✅ | ✅ | ✅ |
+| T7 | Done | ✅ | ✅ | ✅ |
 
 **Slices:** S1 (T1–T4, pure foundation) ✅ complete · S2 (Roslyn engine) in progress.
