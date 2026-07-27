@@ -154,6 +154,13 @@ node's source text; `startLine`/`endLine` from Roslyn line mapping. `addScope` d
   `StringComparer.Ordinal` (UTF-16 ordinal) — never a culture/invariant comparer. A culture comparer
   would silently reorder and change hash-affecting order (manifest module hash, and later
   selection/report ordering). Applies to all string ordering across the port.
+- **Exception-mapping fidelity (worker-cleanup retry):** `WorkerWorkspaces` deletion retries on
+  transient locks. Java's `AccessDeniedException extends IOException`, so its `IOException` retry arm
+  already covers permission denials; .NET's `UnauthorizedAccessException` is **not** an `IOException`,
+  so `TryDelete` explicitly catches it and returns `new IOException(msg, ex)` → `DeleteWithRetries`
+  treats it as retryable (5×/50ms), matching Java's behavior. General rule: when porting Java
+  `catch (IOException)` cleanup, map the .NET exceptions that Java's `IOException` hierarchy subsumes
+  (notably `UnauthorizedAccessException`) into the same retry path rather than letting them escape.
 - **Record mapping (by semantics, not keyword):** a Java `record`/`final class` used as a **value
   carrier** → C# `record`; one used as a **reference-identity resource/handle** (e.g. `CoverageReport`,
   `WorkerWorkspaces`) → C# `sealed class` (a record over `IReadOnlyList`/handle fields would emit a

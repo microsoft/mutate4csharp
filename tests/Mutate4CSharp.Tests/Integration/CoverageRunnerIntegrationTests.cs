@@ -28,22 +28,11 @@ public sealed class CoverageRunnerIntegrationTests : IDisposable
     private const string HitMarker = "\"hit\"";
     private const string MissMarker = "\"miss\"";
 
-    private const string NuGetConfig =
-        """
-        <?xml version="1.0" encoding="utf-8"?>
-        <configuration>
-          <packageSources>
-            <clear />
-            <add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />
-          </packageSources>
-        </configuration>
-        """;
-
     private const string SampleProject =
-        """
+        $"""
         <Project Sdk="Microsoft.NET.Sdk">
           <PropertyGroup>
-            <TargetFramework>net8.0</TargetFramework>
+            <TargetFramework>{HermeticSample.TargetFramework}</TargetFramework>
             <Nullable>enable</Nullable>
             <ImplicitUsings>enable</ImplicitUsings>
           </PropertyGroup>
@@ -51,19 +40,19 @@ public sealed class CoverageRunnerIntegrationTests : IDisposable
         """;
 
     private const string SampleTestProject =
-        """
+        $"""
         <Project Sdk="Microsoft.NET.Sdk">
           <PropertyGroup>
-            <TargetFramework>net8.0</TargetFramework>
+            <TargetFramework>{HermeticSample.TargetFramework}</TargetFramework>
             <Nullable>enable</Nullable>
             <ImplicitUsings>enable</ImplicitUsings>
             <IsPackable>false</IsPackable>
           </PropertyGroup>
           <ItemGroup>
-            <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
-            <PackageReference Include="xunit" Version="2.5.3" />
-            <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
-            <PackageReference Include="coverlet.collector" Version="6.0.0" />
+            <PackageReference Include="Microsoft.NET.Test.Sdk" Version="{HermeticSample.TestSdkVersion}" />
+            <PackageReference Include="xunit" Version="{HermeticSample.XunitVersion}" />
+            <PackageReference Include="xunit.runner.visualstudio" Version="{HermeticSample.XunitVersion}" />
+            <PackageReference Include="coverlet.collector" Version="{HermeticSample.CoverletCollectorVersion}" />
           </ItemGroup>
           <ItemGroup>
             <ProjectReference Include="..\Sample\Sample.csproj" />
@@ -218,9 +207,7 @@ public sealed class CoverageRunnerIntegrationTests : IDisposable
         // temp root and inheriting a machine-level import that could break the sample build;
         // nuget.config pins restore to nuget.org, served from the global cache the main solution's
         // restore already populated with these exact package versions.
-        File.WriteAllText(Path.Combine(_root, "Directory.Build.props"), "<Project />");
-        File.WriteAllText(Path.Combine(_root, "Directory.Build.targets"), "<Project />");
-        File.WriteAllText(Path.Combine(_root, "nuget.config"), NuGetConfig);
+        HermeticSample.WriteHermeticGuards(_root);
 
         string sampleDirectory = Path.Combine(_root, "Sample");
         Directory.CreateDirectory(sampleDirectory);

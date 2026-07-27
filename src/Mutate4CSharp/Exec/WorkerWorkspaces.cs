@@ -65,7 +65,9 @@ public sealed class WorkerWorkspaces : IDisposable
     /// Tries to delete <paramref name="runRoot"/> with the injected <paramref name="deleteTree"/>,
     /// returning the <see cref="IOException"/> it fails with (or <see langword="null"/> on success) —
     /// the seam that makes the Windows file-lock case testable. Faithful port of mutate4java's static
-    /// <c>tryDelete(runRoot, deleteTree)</c>.
+    /// <c>tryDelete(runRoot, deleteTree)</c>. A permission denial (<see cref="UnauthorizedAccessException"/>)
+    /// from a lingering handle is normalized to a retryable <see cref="IOException"/> so it is retried
+    /// the same way as a sharing violation.
     /// </summary>
     /// <param name="runRoot">The run directory to delete.</param>
     /// <param name="deleteTree">The delete seam.</param>
@@ -81,6 +83,15 @@ public sealed class WorkerWorkspaces : IDisposable
         catch (IOException ex)
         {
             return ex;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            // A real dotnet-test worker leaves a testhost / VBCSCompiler handle (or a read-only build
+            // artifact) that can surface the still-locked tree as a permission denial rather than a
+            // sharing violation. Java's AccessDeniedException extends IOException and is retried; the
+            // .NET UnauthorizedAccessException does not, so normalize it to the same retryable
+            // IOException (Anders' T14 proposal) — DeleteWithRetries then tolerates it identically.
+            return new IOException(ex.Message, ex);
         }
     }
 

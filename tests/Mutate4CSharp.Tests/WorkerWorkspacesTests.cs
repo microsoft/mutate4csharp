@@ -130,4 +130,25 @@ public sealed class WorkerWorkspacesTests : IDisposable
 
         result.Should().BeSameAs(failure);
     }
+
+    /// <summary>
+    /// <see cref="WorkerWorkspaces.TryDelete(string, WorkerWorkspaces.DeleteTree)"/> normalizes an
+    /// <see cref="UnauthorizedAccessException"/> — a lingering testhost / VBCSCompiler handle surfacing
+    /// as a permission denial after a real <c>dotnet test</c> — into a retryable
+    /// <see cref="IOException"/> that wraps it, so <see cref="WorkerCleanup.DeleteWithRetries"/> retries
+    /// it the same way as a sharing violation. This has no mutate4java oracle (Java's
+    /// <c>AccessDeniedException</c> is already an <c>IOException</c>); it pins the C# ecosystem
+    /// adaptation (Anders' T14 proposal).
+    /// </summary>
+    [Fact]
+    [Trait("type", "UnitTests")]
+    public void TryDeleteNormalizesUnauthorizedAccessToRetryableIOException()
+    {
+        UnauthorizedAccessException denied = new("denied");
+
+        IOException? result = WorkerWorkspaces.TryDelete(_tempDir, _ => throw denied);
+
+        result.Should().NotBeNull();
+        result!.InnerException.Should().BeSameAs(denied);
+    }
 }
