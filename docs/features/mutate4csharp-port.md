@@ -153,5 +153,6 @@ Per-task log (Dave implements → Bhaskar verifies → Anders reviews → JARVIS
 | T2 | Done | ✅ | ✅ | ✅ |
 | T3 | Done | ✅ | ✅ | ✅ |
 | T4 | Done | ✅ | ✅ | ✅ |
+| T5 | Done | ✅ | ✅ | ✅ |
 
-**Slice S1 (pure, no-Roslyn foundation) complete** — model + manifest + CLI parser.
+**Slices:** S1 (T1–T4, pure foundation) ✅ complete · S2 (Roslyn engine) in progress.
