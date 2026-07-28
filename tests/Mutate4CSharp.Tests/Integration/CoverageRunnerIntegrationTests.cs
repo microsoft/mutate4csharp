@@ -24,6 +24,7 @@ using Microsoft.Mutate4CSharp.Project;
 /// filterable via <c>--filter "type=IntegrationTests"</c>.
 /// </summary>
 [Trait("type", "IntegrationTests")]
+[Collection("Integration")]
 public sealed class CoverageRunnerIntegrationTests : IDisposable
 {
     private const string HitMarker = "\"hit\"";

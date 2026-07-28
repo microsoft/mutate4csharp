@@ -34,6 +34,7 @@ using Microsoft.Mutate4CSharp.Report;
 /// run and it stays filterable via <c>--filter "type=IntegrationTests"</c>.
 /// </remarks>
 [Trait("type", "IntegrationTests")]
+[Collection("Integration")]
 public sealed class WorkerMutationExecutorIntegrationTests : IDisposable
 {
     // Unbounded run (non-positive == wait on process exit only): the keystone asserts the test

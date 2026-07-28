@@ -21,6 +21,7 @@ using Microsoft.Mutate4CSharp.Cli;
 /// is tagged <c>[Trait("type", "IntegrationTests")]</c> so DD3 excludes it from the fast unit run.
 /// </summary>
 [Trait("type", "IntegrationTests")]
+[Collection("Integration")]
 public sealed class MainAcceptanceTests : IDisposable
 {
     private const int ProcessTimeoutMilliseconds = 600_000;

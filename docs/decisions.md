@@ -43,7 +43,7 @@ authoritative behavioral contract is the read-only `../mutate4java` (`spec.md` +
 ## Deliberate departures from mutate4java (approved by Mr. Das)
 
 Default stance is **zero** behavioral departures; the CRAP-era departures do **not** apply (this is a
-mutation tool, not a complexity/CRAP analyzer). The following four are approved:
+mutation tool, not a complexity/CRAP analyzer). The following five are approved:
 
 1. **DD1 — C#-specific manifest scope kinds.** Java's 3 kinds (`class/method/field`) widen to a C#
    taxonomy (type flavors + `constructor/finalizer/operator/conversion-operator/local-function/
@@ -68,6 +68,26 @@ mutation tool, not a complexity/CRAP analyzer). The following four are approved:
    body is null-replaced **exactly once** (expression-bodied and block-bodied forms are mutually
    exclusive — the former has no `ReturnStatement`, the latter no `ArrowExpressionClause`). Surfaced by
    the S7 independent eval; no Java oracle → documented departure. No report-string or exit-code change.
+5. **DD5 — honor the project's global/implicit usings in the single-file compiler.** `RoslynSourceCompiler`
+   references the whole BCL (via `TRUSTED_PLATFORM_ASSEMBLIES`) — matching mutate4java's "platform
+   present, application classpath emptied" split — but a strictly single-file compilation drops C#'s
+   **project-scoped** implicit/global usings (`ImplicitUsings=enable` is the SDK default), so
+   implicit-using-dependent BCL types (`List<T>`/`ISet<T>`/`Task<T>`) fail to bind → `TypeKind.Error`
+   → skipped for null-replacement. Java doesn't hit this because its imports are **in-file** (they
+   survive single-file compilation), so mutate4java *does* mutate stdlib reference returns. To restore
+   parity, `Compile` discovers the target file's owning `.csproj` and injects the reconstructed using
+   context as a **context-only** syntax tree (only the target file's body is analyzed for sites):
+   precedence **generated `obj/**/<Project>.GlobalUsings.g.cs` → synthesized base `Microsoft.NET.Sdk`
+   set → plus a parse-only scan of the project's `.cs` for explicit `global using`s**. This is the
+   **usings lever only** — the references lever is untouched, so it is **bounded** (a `using` can bind
+   only an already-referenced BCL type, never a third-party one) and **monotonic** (it can only add
+   null-mutants; existing kills never regress; a malformed/unreadable owning project degrades to the
+   pre-DD5 no-context path via a narrow catch; the per-owning-project using context is memoized to
+   avoid an O(N²) rescan). **Caveat:** monotonicity holds *within the tool's contract* (code that
+   actually compiles) — an injected `global using` could in theory create a simple-name ambiguity that
+   drops a site, but only on code that wouldn't compile under the project's real global usings anyway.
+   Surfaced by the S8 dogfood; **enriching references (project/NuGet) is explicitly rejected** as *less*
+   faithful than Java's empty application classpath. No report-string or exit-code change.
 
 Exit code `2` is therefore **broadened** to "baseline failed **OR** no unit-test project **OR** zero
 unit tests executed" — three sub-reasons documented under one code, keeping the `0/1/2/3` contract.
