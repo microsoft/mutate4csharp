@@ -219,3 +219,19 @@ The fidelity mandate is "every mutate4java test → a faithful C# counterpart." 
   both of which DD3 (single-project `<Project>.Tests|.UnitTests` scoping) and A4 (Cobertura
   `<sources>`-relative absolute-path keying) **replace**. The replacement behavior is covered by
   `ModuleResolverTests` + the Cobertura parser tests — so the behavior is not lost, only relocated.
+- **S7 remediation adds (findings surfaced by the independent `gpt-5.6-sol` eval).** The blind eval
+  (fed only the Requirements) confirmed most "non-conformance" flags were the approved DD1–DD4
+  departures, and surfaced genuine gaps now closed: **A1** green all-killed→exit-0 + mixed-UNCOVERED
+  report; **A2** baseline-red→exit-2; **A3** `--update-manifest`-on-red→exit-0 (tests not run);
+  **A4** `ProcessTestCommandExecutorTests` (5 faithful ports — configured run, `WithCommand`/
+  `WithTestProject` argv, timeout→124, output-on-failure); **A5** consolidated 4-family KILLED in one
+  run (the operator set stays exhaustively pinned by `MutationCatalogTests`); **A6** `--lines` e2e
+  (CliExecution-scope); **A7** guarded real-timeout IT.
+- **Testability seam (A4).** `ProcessTestCommandExecutor.Command` (get-only `IReadOnlyList<string>?`,
+  `null` on the raw-launcher path, **never read by `RunTests`**) exposes the constructed argv so the
+  DD3 `WithTestProject` / A9 `WithCommand` argv is assertable without spawning. `public` is mandated by
+  the no-`internal` guardrail; it carries the command as executor state, which is **more** faithful
+  than the earlier omission (Java's `ProcessTestCommandExecutor` holds the override in a private
+  write-but-never-read field). `ProcessTestCommandFactory.ShellCommand` is the single OS-detected
+  shell-argv source of truth (`cmd.exe /c` / `/bin/sh -lc`) shared by `Command` and the spawn path —
+  byte-identical A9 behavior.

@@ -375,6 +375,33 @@ public sealed class CliApplicationTests : IDisposable
         executor.Timeouts.Should().ContainSingle().Which.Should().Be(1000L);
     }
 
+    /// <summary>
+    /// A6 — <c>--lines</c> restricts the run to the requested line range through the full
+    /// CLI→parse→filter→selection wiring. With BOTH sites covered, requesting only line 5 mutates and
+    /// kills the line-5 boolean site while the line-9 comparison site is removed entirely (it is
+    /// neither run nor reported UNCOVERED), so exactly one mutant runs and the run exits 0. Distinct
+    /// from <see cref="FiltersMutationsByRequestedLines"/>, whose line-9 site was already uncovered.
+    /// </summary>
+    [Fact]
+    [Trait("type", "UnitTests")]
+    public void RestrictsMutationsToRequestedLineRange()
+    {
+        string file = WriteSourceFile();
+        StubCoverageRunner coverageRunner = new(Coverage(file, 5, 9));
+        StubExecutor executor = new(new TestRun(1, "killed", 5, false));
+        StringWriter output = new();
+
+        int exit = Application(output, new StringWriter(), executor, coverageRunner)
+            .Execute([Relative(file), "--lines", "5"]);
+
+        exit.Should().Be(0);
+        output.ToString().Should().Contain("KILLED src/Demo/Sample.cs:5 replace true with false")
+            .And.NotContain("src/Demo/Sample.cs:9")
+            .And.Contain("Coverage: 0 uncovered sites skipped.")
+            .And.Contain("Summary: 1 killed, 0 survived, 1 total.");
+        executor.Invocations.Should().Be(1);
+    }
+
     /// <summary>A timed-out mutant counts as killed and prints the timeout marker.</summary>
     [Fact]
     [Trait("type", "UnitTests")]

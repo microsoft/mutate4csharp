@@ -52,20 +52,25 @@ public static class ProcessTestCommandFactory
         ArgumentNullException.ThrowIfNull(projectRoot);
         ArgumentNullException.ThrowIfNull(commandText);
 
-        ProcessStartInfo startInfo = CreateStartInfo(projectRoot);
-        if (OperatingSystem.IsWindows())
-        {
-            startInfo.FileName = "cmd.exe";
-            startInfo.ArgumentList.Add("/c");
-        }
-        else
-        {
-            startInfo.FileName = "/bin/sh";
-            startInfo.ArgumentList.Add("-lc");
-        }
+        return StartProcess(projectRoot, ShellCommand(commandText));
+    }
 
-        startInfo.ArgumentList.Add(commandText);
-        return Start(startInfo);
+    /// <summary>
+    /// Builds the platform-shell argv that runs <paramref name="commandText"/> as a single argument
+    /// (<c>cmd.exe /c &lt;command&gt;</c> on Windows, <c>/bin/sh -lc &lt;command&gt;</c> otherwise).
+    /// The single source of truth for the A9 shell override, shared by
+    /// <see cref="StartShellProcess(string, string)"/> and the command
+    /// <see cref="ProcessTestCommandExecutor"/> records for a <c>--test-command</c> override.
+    /// </summary>
+    /// <param name="commandText">The verbatim command string handed to the shell.</param>
+    /// <returns>The shell argv token list, shell launcher first and the user command last.</returns>
+    public static IReadOnlyList<string> ShellCommand(string commandText)
+    {
+        ArgumentNullException.ThrowIfNull(commandText);
+
+        return OperatingSystem.IsWindows()
+            ? ["cmd.exe", "/c", commandText]
+            : ["/bin/sh", "-lc", commandText];
     }
 
     private static ProcessStartInfo CreateStartInfo(string projectRoot)

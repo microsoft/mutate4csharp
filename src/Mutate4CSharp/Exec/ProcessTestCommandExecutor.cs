@@ -29,6 +29,15 @@ public sealed class ProcessTestCommandExecutor : ITestCommandExecutor
     private readonly ProcessLauncher _launcher;
 
     /// <summary>
+    /// Gets the argv token list this executor spawns — the DD3 default command, an explicit argv, or
+    /// the shell-wrapped <c>--test-command</c> override — or <see langword="null"/> when the executor
+    /// was built from a raw <see cref="ProcessLauncher"/> whose argv is opaque. Exposed so the DD3
+    /// <see cref="WithTestProject(string)"/> and A9 <see cref="WithCommand(string)"/> argv
+    /// construction can be pinned without spawning a process.
+    /// </summary>
+    public IReadOnlyList<string>? Command { get; }
+
+    /// <summary>
     /// Initializes an executor that runs the DD3 default test command.
     /// </summary>
     public ProcessTestCommandExecutor()
@@ -43,6 +52,7 @@ public sealed class ProcessTestCommandExecutor : ITestCommandExecutor
     public ProcessTestCommandExecutor(IReadOnlyList<string> command)
         : this(projectRoot => ProcessTestCommandFactory.StartProcess(projectRoot, command))
     {
+        Command = command;
     }
 
     /// <summary>
@@ -52,6 +62,7 @@ public sealed class ProcessTestCommandExecutor : ITestCommandExecutor
     public ProcessTestCommandExecutor(string commandText)
         : this(projectRoot => ProcessTestCommandFactory.StartShellProcess(projectRoot, commandText))
     {
+        Command = ProcessTestCommandFactory.ShellCommand(commandText);
     }
 
     /// <summary>

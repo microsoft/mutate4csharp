@@ -134,6 +134,154 @@ public sealed class MainAcceptanceTests : IDisposable
         }
         """;
 
+    // A1: one boolean literal the test exercises + kills (return true, line 7) and one the test never
+    // reaches so its site is uncovered and skipped (return false, line 12).
+    private const string BooleanCoveredAndUncoveredSource =
+        """
+        namespace Sample;
+
+        public static class Calculator
+        {
+            public static bool Exercised()
+            {
+                return true;
+            }
+
+            public static bool NotExercised()
+            {
+                return false;
+            }
+        }
+        """;
+
+    private const string BooleanExercisedTestSource =
+        """
+        using Sample;
+        using Xunit;
+
+        public sealed class CalculatorTests
+        {
+            [Fact]
+            public void ExercisedIsTrue()
+            {
+                Assert.True(Calculator.Exercised());
+            }
+        }
+        """;
+
+    // A2/A3: a red test — Add(2, 3) is 5, so asserting 6 fails the baseline.
+    private const string SingleAddFailingTestSource =
+        """
+        using Sample;
+        using Xunit;
+
+        public sealed class CalculatorTests
+        {
+            [Fact]
+            public void AddIsWrong()
+            {
+                Assert.Equal(6, Calculator.Add(2, 3));
+            }
+        }
+        """;
+
+    // A5: one site per operator family — boolean (true), comparison (>), reference null-replacement
+    // ("hello"), and unary (!) — consolidating mutate4java's four per-operator acceptance tests.
+    private const string MultiOperatorSource =
+        """
+        namespace Sample;
+
+        public static class Operators
+        {
+            public static bool Enabled()
+            {
+                return true;
+            }
+
+            public static bool Above(int value)
+            {
+                return value > 10;
+            }
+
+            public static string Greet()
+            {
+                return "hello";
+            }
+
+            public static bool Allowed(bool blocked)
+            {
+                return !blocked;
+            }
+        }
+        """;
+
+    private const string MultiOperatorKillingTestSource =
+        """
+        using Sample;
+        using Xunit;
+
+        public sealed class OperatorsTests
+        {
+            [Fact]
+            public void EnabledIsTrue()
+            {
+                Assert.True(Operators.Enabled());
+            }
+
+            [Fact]
+            public void AboveTenIsFalseAtBoundary()
+            {
+                Assert.False(Operators.Above(10));
+            }
+
+            [Fact]
+            public void GreetReturnsHello()
+            {
+                Assert.Equal("hello", Operators.Greet());
+            }
+
+            [Fact]
+            public void AllowedNegatesBlocked()
+            {
+                Assert.True(Operators.Allowed(false));
+            }
+        }
+        """;
+
+    // A7: removing the `!` in `while (!done)` turns the loop into `while (done)` — an infinite loop
+    // when the test calls SpinUntil(true), so the single mutant is killed by the per-mutant timeout.
+    private const string InfiniteLoopSource =
+        """
+        namespace Sample;
+
+        public static class Looping
+        {
+            public static bool SpinUntil(bool done)
+            {
+                while (!done)
+                {
+                }
+
+                return done;
+            }
+        }
+        """;
+
+    private const string InfiniteLoopKillingTestSource =
+        """
+        using Sample;
+        using Xunit;
+
+        public sealed class LoopingTests
+        {
+            [Fact]
+            public void SpinUntilDoneReturnsTrue()
+            {
+                Assert.True(Looping.SpinUntil(true));
+            }
+        }
+        """;
+
     // The expected §13 reports are built with explicit "\n" concatenation (never a multi-line raw
     // string, whose newlines would inherit this source file's line endings) so the byte-verbatim
     // assertion pins the "\n"-only contract on Windows and the Linux CI runner alike.
@@ -180,6 +328,24 @@ public sealed class MainAcceptanceTests : IDisposable
         + "Manifest-violating surface area: 0\n"
         + "KILLED Sample/Calculator.cs:7 replace + with - (<N> ms)\n"
         + "Coverage: 0 uncovered sites skipped.\n"
+        + "Summary: 1 killed, 0 survived, 1 total.\n";
+
+    // A1: the canonical mixed success path — one covered mutant the tests kill and one uncovered
+    // mutant that is reported (BEFORE the killed line) and skipped; all sites resolved so the run
+    // exits 0 and stamps the manifest.
+    private const string ExpectedGreenKilledWithUncoveredReport =
+        "Baseline tests passed in <N> ms.\n"
+        + "Total mutation sites: 2\n"
+        + "Covered mutation sites: 1\n"
+        + "Uncovered mutation sites: 1\n"
+        + "Changed mutation sites: 0\n"
+        + "Manifest exists: false\n"
+        + "Module hash changed: false\n"
+        + "Differential surface area: 0\n"
+        + "Manifest-violating surface area: 0\n"
+        + "UNCOVERED Sample/Calculator.cs:12 replace false with true\n"
+        + "KILLED Sample/Calculator.cs:7 replace true with false (<N> ms)\n"
+        + "Coverage: 1 uncovered sites skipped.\n"
         + "Summary: 1 killed, 0 survived, 1 total.\n";
 
     private TestProject? _project;
@@ -361,6 +527,142 @@ public sealed class MainAcceptanceTests : IDisposable
 
         result.ExitCode.Should().Be(1);
         result.StandardError.Should().Contain("--scan may not be combined with --update-manifest");
+    }
+
+    /// <summary>
+    /// A1 — the canonical green success path: a covered boolean mutant the test kills and a second,
+    /// uncovered boolean mutant. The tool exits 0 with the byte-verbatim §13 report — the UNCOVERED
+    /// line ordered before the KILLED line — and stamps the module manifest into the source.
+    /// </summary>
+    [Fact]
+    [Trait("type", "IntegrationTests")]
+    public void GreenAllKilledWithUncoveredSiteExitsZeroAndWritesManifest()
+    {
+        _project = new TestProjectFactory()
+            .WithProductionFile("Calculator.cs", BooleanCoveredAndUncoveredSource)
+            .WithTestFile("CalculatorTests.cs", BooleanExercisedTestSource)
+            .Create();
+
+        ToolResult result = RunTool(_project.Root, ProductionArgument(_project, "Calculator.cs"));
+
+        result.ExitCode.Should().Be(
+            0,
+            "the only covered mutant is killed and the uncovered one is skipped; stderr was:\n{0}",
+            result.StandardError);
+        result.StandardError.Should().BeEmpty();
+        NormalizeDurations(result.StandardOutput).Should().Be(ExpectedGreenKilledWithUncoveredReport);
+        File.ReadAllText(_project.ProductionFile("Calculator.cs"))
+            .Should().Contain("mutate4csharp-manifest", "an exit-0 run stamps the module manifest into the source");
+    }
+
+    /// <summary>
+    /// A2 — a baseline whose test is red fails fast (§14 exit 2 via <c>BaselineRunner.Fail</c>): the
+    /// tool writes nothing to stdout and its stderr starts with the byte-verbatim <c>Baseline tests
+    /// failed.\n</c> line (the failing <c>dotnet test</c> output follows, so only the prefix is pinned).
+    /// </summary>
+    [Fact]
+    [Trait("type", "IntegrationTests")]
+    public void RedBaselineExitsTwo()
+    {
+        _project = new TestProjectFactory()
+            .WithProductionFile("Calculator.cs", SingleAddSource)
+            .WithTestFile("CalculatorTests.cs", SingleAddFailingTestSource)
+            .Create();
+
+        ToolResult result = RunTool(_project.Root, ProductionArgument(_project, "Calculator.cs"));
+
+        result.ExitCode.Should().Be(
+            2, "a red baseline fails fast before any mutant runs; stderr was:\n{0}", result.StandardError);
+        result.StandardOutput.Should().BeEmpty();
+        result.StandardError.Should().StartWith("Baseline tests failed.\n");
+    }
+
+    /// <summary>
+    /// A3 — <c>--update-manifest</c> short-circuits before the module check and baseline (T15
+    /// ordering): run against a project whose test would fail the baseline, it still exits 0, writes
+    /// only the <c>Updated manifest for …</c> line to stdout, stamps the manifest into the source, and
+    /// never touches stderr — proving the tests were not run.
+    /// </summary>
+    [Fact]
+    [Trait("type", "IntegrationTests")]
+    public void UpdateManifestOnRedProjectExitsZeroWithoutRunningTests()
+    {
+        _project = new TestProjectFactory()
+            .WithProductionFile("Calculator.cs", SingleAddSource)
+            .WithTestFile("CalculatorTests.cs", SingleAddFailingTestSource)
+            .Create();
+
+        ToolResult result = RunTool(
+            _project.Root, ProductionArgument(_project, "Calculator.cs"), "--update-manifest");
+
+        result.ExitCode.Should().Be(
+            0,
+            "update-manifest short-circuits before the baseline, so the red test never runs; stderr was:\n{0}",
+            result.StandardError);
+        result.StandardOutput.Should().Be("Updated manifest for Sample/Calculator.cs\n");
+        result.StandardError.Should().BeEmpty();
+        File.ReadAllText(_project.ProductionFile("Calculator.cs"))
+            .Should().Contain("mutate4csharp-manifest", "update-manifest stamps the module manifest into the source");
+    }
+
+    /// <summary>
+    /// A5 — one consolidated run whose production code has a boolean, a comparison, a reference
+    /// null-replacement, and a unary mutation site, all covered and killed by the tests. Asserts the
+    /// four operator-family descriptions and the all-killed summary via <c>Contains</c> (so the run is
+    /// robust to per-mutant ordering), exiting 0. Replaces mutate4java's four separate per-operator
+    /// acceptance tests with a single compile-and-kill run.
+    /// </summary>
+    [Fact]
+    [Trait("type", "IntegrationTests")]
+    public void MultiOperatorFamilyAllKilledExitsZero()
+    {
+        _project = new TestProjectFactory()
+            .WithProductionFile("Operators.cs", MultiOperatorSource)
+            .WithTestFile("OperatorsTests.cs", MultiOperatorKillingTestSource)
+            .Create();
+
+        ToolResult result = RunTool(_project.Root, ProductionArgument(_project, "Operators.cs"));
+
+        result.ExitCode.Should().Be(
+            0,
+            "every covered mutant across the four operator families is killed; stderr was:\n{0}",
+            result.StandardError);
+        result.StandardError.Should().BeEmpty();
+        result.StandardOutput.Should().Contain("replace true with false")
+            .And.Contain("replace > with >=")
+            .And.Contain("replace \"hello\" with null")
+            .And.Contain("replace ! with removed !")
+            .And.Contain("Coverage: 0 uncovered sites skipped.")
+            .And.Contain("Summary: 4 killed, 0 survived, 4 total.");
+    }
+
+    /// <summary>
+    /// A7 — the only end-to-end proof of the per-mutant timeout path: removing the <c>!</c> in
+    /// <c>while (!done)</c> makes the sole mutant loop forever, so the tool's own per-mutant timeout
+    /// (bounded to one baseline duration via <c>--timeout-factor 1</c>) fires and scores it KILLED
+    /// (timed out); the tool exits 0. Guarded by the single infinite-loop mutant, the test needs no
+    /// <c>Thread.Sleep</c> and relies solely on the tool's timeout.
+    /// </summary>
+    [Fact]
+    [Trait("type", "IntegrationTests")]
+    public void InfiniteLoopMutantIsKilledByTimeout()
+    {
+        _project = new TestProjectFactory()
+            .WithProductionFile("Looping.cs", InfiniteLoopSource)
+            .WithTestFile("LoopingTests.cs", InfiniteLoopKillingTestSource)
+            .Create();
+
+        ToolResult result = RunTool(
+            _project.Root, ProductionArgument(_project, "Looping.cs"), "--timeout-factor", "1");
+
+        result.ExitCode.Should().Be(
+            0,
+            "the sole mutant hangs and is killed by the per-mutant timeout; stderr was:\n{0}",
+            result.StandardError);
+        result.StandardError.Should().BeEmpty();
+        result.StandardOutput.Should().Contain("replace ! with removed !")
+            .And.Contain("timed out")
+            .And.Contain("Summary: 1 killed, 0 survived, 1 total.");
     }
 
     private static string ProductionArgument(TestProject project, string fileName)
