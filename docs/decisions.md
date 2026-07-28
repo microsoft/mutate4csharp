@@ -83,7 +83,10 @@ mutation tool, not a complexity/CRAP analyzer). The following five are approved:
    only an already-referenced BCL type, never a third-party one) and **monotonic** (it can only add
    null-mutants; existing kills never regress; a malformed/unreadable owning project degrades to the
    pre-DD5 no-context path via a narrow catch; the per-owning-project using context is memoized to
-   avoid an O(N²) rescan). **Caveat:** monotonicity holds *within the tool's contract* (code that
+   avoid an O(N²) rescan). The **synthesized fallback** reads the `.csproj` XML directly (it does NOT
+   follow `<Import>` / run MSBuild), so `ImplicitUsings` declared in an imported `.targets` is covered
+   only by the **preferred generated-file path** — which always exists after the baseline build a real
+   run performs (confirmed production-faithful by the S8 re-dogfood). **Caveat:** monotonicity holds *within the tool's contract* (code that
    actually compiles) — an injected `global using` could in theory create a simple-name ambiguity that
    drops a site, but only on code that wouldn't compile under the project's real global usings anyway.
    Surfaced by the S8 dogfood; **enriching references (project/NuGet) is explicitly rejected** as *less*
