@@ -1,77 +1,260 @@
-# Design decisions — crap4csharp
+# Design decisions — mutate4csharp
 
-Locked decisions for the C# port of `crap4java`. Source of truth alongside `docs/features/`.
+Locked decisions for the C# port of `mutate4java`. Source of truth alongside `docs/features/`. The
+authoritative behavioral contract is the read-only `../mutate4java` (`spec.md` + source + tests).
 
 ## Product intent
 
-- Analyze **C# projects** — the C# member of the `crap4*` family (`crap4clj` → `crap4java` →
-  `crap4csharp`). Ecosystem: Roslyn (parse + complexity), Coverlet → Cobertura (coverage),
-  `dotnet test` / MSBuild (driver).
-- **Faithful 1:1 port** of `crap4java`: class decomposition, CRAP formula, CLI contract, report
-  format, and exit codes preserved. Only the ecosystem adapters change.
-- **Test fidelity:** every `crap4java` test gets a faithful C# counterpart with identical
-  verification — except where an approved deliberate departure changes it.
+- A **mutation-testing tool for C# projects** — the C# member of the `mutate4*` family (`mutate4clj`
+  → `mutate4java` → `mutate4csharp`). It targets one `.cs` file, discovers AST mutation sites, runs
+  the owning project's unit tests per mutant, and reports killed / survived / uncovered mutants with
+  an embedded differential manifest. Ecosystem: Roslyn (parse + mutation), Coverlet → Cobertura
+  (coverage), `dotnet test` / MSBuild (driver).
+- **Faithful 1:1 port** of `mutate4java`: class decomposition, the mutation set, CLI contract, report
+  format, and exit codes are preserved. Only the ecosystem adapters and the approved deliberate
+  departures (below) change.
+- **Test fidelity:** every `mutate4java` test gets a faithful C# counterpart asserting the same
+  behavior — except where an approved departure changes it.
+- **OSS libraries (resolved):** the only new runtime dependency is **Roslyn**
+  (`Microsoft.CodeAnalysis.CSharp`). Coverage via **coverlet.collector** (`XPlat Code Coverage`);
+  tests **xUnit**; assertions **FluentAssertions** pinned `[7.0.0,8.0.0)` (v8 is commercial); no JSON
+  dependency; process / hashing / XML via the BCL.
+- **Idiomatic (resolved):** the adopt-now baseline below. Stryker.NET is **rejected** as the engine —
+  a different product that cannot reproduce the manifest / differential / scan / exact strings / exit
+  codes.
 
 ## Locked choices
 
 | Area | Decision | Notes |
 |---|---|---|
-| Analysis target | C# projects | Roslyn + Coverlet/Cobertura + `dotnet test` |
-| Namespace | `Microsoft.Crap4CSharp` | `AssemblyName`/`RootNamespace` = `Microsoft.<Project>` |
-| TFM | `net8.0` | SDKs 8/9/10 present; .NET 10 offers no conversion benefit |
-| Parser | Roslyn (`Microsoft.CodeAnalysis.CSharp`) | analog of the JDK compiler tree API |
-| Coverage | Coverlet → **Cobertura** (line counters) | JaCoCo `INSTRUCTION` has no exact analog — absolute numbers differ, algorithm identical |
-| Test framework | **xUnit** | + `Microsoft.NET.Test.Sdk`, `coverlet.collector` |
-| Assertions | **FluentAssertions 7.x**, pinned `[7.0.0,8.0.0)` | v8+ is commercial (Xceed); lock file enforces the pin |
-| Coverage key | Roslyn enclosing-type **FQN** per method | C# allows many types per file; filename keys mis-match Cobertura |
-| Module root | nearest **`.sln`** (fallback `.csproj` → project root) | so `dotnet test` actually runs tests |
+| Engine | **O1** — port the bespoke engine onto Roslyn | Stryker.NET rejected |
+| Analysis target | one C# `.cs` file | Roslyn syntax tree + `SemanticModel` |
+| Namespace | `Microsoft.Mutate4CSharp` | `AssemblyName`/`RootNamespace` = `Microsoft.<Project>`; sub-namespaces mirror the Java packages |
+| TFM | `net8.0` | manual base64url helper (net9 `Base64Url` not used) |
+| Layout | **single exe** `Mutate4CSharp` + `Mutate4CSharp.Tests` | tests reference the exe assembly |
+| Parser | Roslyn (`Microsoft.CodeAnalysis.CSharp`) | single-file `CSharpCompilation` + `SemanticModel` for numeric/reference typing |
+| Coverage | Coverlet → **Cobertura** via `--collect:"XPlat Code Coverage"` | newest `coverage.cobertura.xml` under results dir; `hits>0` = covered |
+| Test framework | **xUnit** + `Microsoft.NET.Test.Sdk` + `coverlet.collector` | already committed in `Mutate4CSharp.Tests.Common.targets` |
+| Assertions | **FluentAssertions** `[7.0.0,8.0.0)` | lock file enforces the pin (v8 is commercial) |
+| Module root | **`<Project>.Tests` / `<Project>.UnitTests`** convention | see below; fail-fast exit `2` if absent |
+| Helper visibility | **`public`** by default (`file` where trivially single-file) | guardrail #9: never `internal` |
+| Manifest marker | `/* mutate4csharp-manifest … */`, `version=1` | wider `kind` vocabulary (DD1) |
 
-## Deliberate departures from crap4java (approved by Mr. Das)
+## Deliberate departures from mutate4java (approved by Mr. Das)
 
-1. **Fail fast** — when a module produces no coverage / runs no tests, exit non-zero (`1`) with a
-   greppable stderr message, instead of the Java warn + `N/A` + exit 0. Applies at the **module/run**
-   level only; **per-method `N/A` is unchanged** (a method absent from a populated report still yields
-   an `N/A` row).
-2. **Richer cyclomatic complexity** — augmented Roslyn node set (below). CC is therefore **not
-   numerically comparable** to `crap4java` on code using the modern constructs.
-3. **Determinism/idiom** — nullable reference types enabled; `InvariantCulture` + explicit `"\n"` in
-   the report.
+Default stance is **zero** behavioral departures; the CRAP-era departures do **not** apply (this is a
+mutation tool, not a complexity/CRAP analyzer). The following five are approved:
 
-## Cyclomatic complexity — authoritative node set
+1. **DD1 — C#-specific manifest scope kinds.** Java's 3 kinds (`class/method/field`) widen to a C#
+   taxonomy (type flavors + `constructor/finalizer/operator/conversion-operator/local-function/
+   property/accessor/indexer/event/enum-member`), with per-accessor granularity. Manifest **format
+   and `version=1` are unchanged** — only the `kind` value set widens. No report-string or exit-code
+   change.
+2. **DD2 — Fail-fast `exit 2`** when (a) no `<Project>.Tests`/`<Project>.UnitTests` (or owning
+   `.csproj`) resolves, or (b) the baseline executes **zero** unit tests. This is **in addition to** —
+   not a replacement for — mutate4java's faithful "green baseline + all sites uncovered → exit 0",
+   which is **kept**. ("All uncovered but tests ran" → 0; "no test project / zero tests" → 2.)
+3. **DD3 — Unit-only, single-project test scoping.** Run only `<Project>.Tests|.UnitTests` with the
+   filter `type!=IntegrationTests&Category!=no-mutate`, replacing mutate4java's whole-owning-module
+   `mvn test -DexcludeTags=no-mutate`. `--test-command` still fully overrides (coverage → allCovered
+   per spec §9).
+4. **DD4 — expression-bodied members are return sites for null-replacement.** C# `=> expr`
+   value-returning member bodies are treated as `return expr;` sites (Java `visitReturn` has no arrow
+   oracle — Java has no expression-bodied form). **Fires for:** method, property-get, indexer-get,
+   `get`-accessor, operator, conversion-operator, and non-void local-function arrow bodies.
+   **Excluded:** `set`/`init`/`add`/`remove` accessors, constructors, finalizers (structural gate on
+   the arrow-clause parent) and any `void` body (factory `IsReference` type gate). Lambdas are
+   naturally excluded (their body is not an `ArrowExpressionClause`). Guarded so each value-returning
+   body is null-replaced **exactly once** (expression-bodied and block-bodied forms are mutually
+   exclusive — the former has no `ReturnStatement`, the latter no `ArrowExpressionClause`). Surfaced by
+   the S7 independent eval; no Java oracle → documented departure. No report-string or exit-code change.
+5. **DD5 — honor the project's global/implicit usings in the single-file compiler.** `RoslynSourceCompiler`
+   references the whole BCL (via `TRUSTED_PLATFORM_ASSEMBLIES`) — matching mutate4java's "platform
+   present, application classpath emptied" split — but a strictly single-file compilation drops C#'s
+   **project-scoped** implicit/global usings (`ImplicitUsings=enable` is the SDK default), so
+   implicit-using-dependent BCL types (`List<T>`/`ISet<T>`/`Task<T>`) fail to bind → `TypeKind.Error`
+   → skipped for null-replacement. Java doesn't hit this because its imports are **in-file** (they
+   survive single-file compilation), so mutate4java *does* mutate stdlib reference returns. To restore
+   parity, `Compile` discovers the target file's owning `.csproj` and injects the reconstructed using
+   context as a **context-only** syntax tree (only the target file's body is analyzed for sites):
+   precedence **generated `obj/**/<Project>.GlobalUsings.g.cs` → synthesized base `Microsoft.NET.Sdk`
+   set → plus a parse-only scan of the project's `.cs` for explicit `global using`s**. This is the
+   **usings lever only** — the references lever is untouched, so it is **bounded** (a `using` can bind
+   only an already-referenced BCL type, never a third-party one) and **monotonic** (it can only add
+   null-mutants; existing kills never regress; a malformed/unreadable owning project degrades to the
+   pre-DD5 no-context path via a narrow catch; the per-owning-project using context is memoized to
+   avoid an O(N²) rescan). The **synthesized fallback** reads the `.csproj` XML directly (it does NOT
+   follow `<Import>` / run MSBuild), so `ImplicitUsings` declared in an imported `.targets` is covered
+   only by the **preferred generated-file path** — which always exists after the baseline build a real
+   run performs (confirmed production-faithful by the S8 re-dogfood). **Caveat:** monotonicity holds *within the tool's contract* (code that
+   actually compiles) — an injected `global using` could in theory create a simple-name ambiguity that
+   drops a site, but only on code that wouldn't compile under the project's real global usings anyway.
+   Surfaced by the S8 dogfood; **enriching references (project/NuGet) is explicitly rejected** as *less*
+   faithful than Java's empty application classpath. No report-string or exit-code change.
 
-Base `CC = 1`. Walk the method `Body`/`ExpressionBody`; **descend into lambdas + local functions**;
-**prune at nested type/enum declarations**. `+1` for each occurrence of:
+Exit code `2` is therefore **broadened** to "baseline failed **OR** no unit-test project **OR** zero
+unit tests executed" — three sub-reasons documented under one code, keeping the `0/1/2/3` contract.
+All stdout report strings are unchanged; DD2 adds **stderr** lines only.
 
-- **Faithful (ported from crap4java):** `IfStatement`; `For`; `ForEach` (+ `ForEachVariable`);
-  `While`; `Do`; `CatchClause`; `ConditionalExpression` (`?:`); `CaseSwitchLabel`;
-  `CasePatternSwitchLabel`; `DefaultSwitchLabel`; `&&`; `||`.
-- **Modern additions (approved):** `SwitchExpressionArm`; `??` (`CoalesceExpression`); `??=`
-  (`CoalesceAssignmentExpression`); pattern `and` (`AndPattern`); pattern `or` (`OrPattern`);
-  pattern `not` (`UnaryPattern`); `CatchFilterClause`; **every `when` guard** (`WhenClause` — all-when).
-- **Not counted:** bare `else`; `try`/`finally`; jump statements (`return`/`break`/`continue`/`goto`/
-  `throw`); `?.`/`?[]`; `is`-pattern without a combinator; bitwise `&`/`|`/`^`.
+**Fidelity principle — stdout verbatim, stderr adapted.** Only **stdout report strings** carry the
+byte-for-byte verbatim guarantee (asserted by the formatter/report tests). **stderr diagnostics** are
+**adapted to the C# ecosystem** where the Java text names a Java-only artifact: e.g. the coverage-reuse
+messages (`"Reusing existing coverage data."` / `"Coverage reuse requested, but no existing coverage
+report was found. Continuing without coverage filtering."`) **drop mutate4java's JaCoCo path**
+(`target/site/jacoco/jacoco.xml`) — the coverlet equivalent lives at a non-deterministic
+`TestResults/<guid>/coverage.cobertura.xml` not knowable at message time. Substance (reuse vs.
+not-found→continuing) is preserved. Same principle already governs the DD2 stderr lines and the usage
+text.
+
+## Supported mutation set (faithful — spec §6.1)
+
+One mutation site per (AST-based; comments, string/char literals, generic `<>`, and manifest content
+are excluded):
+
+- boolean literals `true` ↔ `false`
+- equality / comparison `== != < <= > >=`
+- arithmetic `+` ↔ `-`, `*` ↔ `/` (`+` is numeric-only — no string-concat mutation)
+- conditional boolean `&&` ↔ `||`
+- unary removal `!expr → expr`, `-expr → expr`
+- integer constants `0` ↔ `1`
+- reference-valued rvalues → `null` (return / initializer / **simple** assignment RHS — NOT compound
+  `+=`/`??=` RHS, matching Java `visitAssignment`=`AssignmentTree`(simple-`=`)-only with unconditional
+  recursion; **and expression-bodied value-returning member bodies per DD4**; not call arguments)
+
+Numeric-vs-reference decisions use the resolved `SemanticModel` (single-file `CSharpCompilation` with
+default framework references); C# value types (structs/enums) are non-reference — the faithful analog
+of Java primitives.
+
+## Manifest scope-kind taxonomy (DD1)
+
+Scope id = `"<kind>:<prefix>#<detail>:<startLine>"`. `prefix` = the enclosing **type**-name stack
+(outer→inner, including the type itself) joined by `.` — members do **not** push onto the prefix
+(faithful to Java, which stacks only class names). `semanticHash` = SHA-256 hex of the declaration
+node's source text; `startLine`/`endLine` from Roslyn line mapping. `addScope` de-dups by id.
+
+- **Type kinds (push prefix):** `class struct record record-struct interface enum delegate`.
+- **Member kinds (scopes, no prefix push):** `method constructor finalizer operator
+  conversion-operator local-function property accessor indexer field event enum-member`.
+- **Details:** method `Name(paramCount)`; ctor `ctor(n)` / static `cctor(0)`; finalizer
+  `finalizer(0)`; operator `operator<Op>(n)`; conversion `implicit <T>(1)` / `explicit <T>(1)`;
+  accessor `<Owner>.get|set|init|add|remove` (only when the accessor has a body); indexer `this[](n)`;
+  field one scope per declarator (`int a, b;` → two); enum member `Name`.
+- **Not scopes:** namespaces (and never a prefix component), lambdas / anonymous methods, local
+  variables / parameters, using / attribute / statement nodes, compiler-generated members.
+- **Fallback:** `file:<filename>` (top-level statements / outside any declaration).
+
+## Module-root + test-selection convention
+
+- **`<Project>` derivation:** ascend from the target `.cs` file to the nearest `.csproj`; `<Project>`
+  = its file name without extension (= `MSBuildProjectName`). No owning `.csproj` up to the workspace
+  root → **exit 2**.
+- **Test-project discovery:** find `<Project>.Tests.csproj` or `<Project>.UnitTests.csproj` whose
+  `<ProjectReference>` closure includes `<Project>.csproj` (validates the mapping in mono-repos).
+  Tie-break: sibling → under a `tests/` dir → nearest by path; `.Tests` over `.UnitTests`. None found
+  → **exit 2**.
+- **Default test command:** `dotnet test <Project>.Tests.csproj --collect:"XPlat Code Coverage"
+  --filter "type!=IntegrationTests&Category!=no-mutate" --results-directory <dir> --logger trx`.
+  Unit = `type` ∈ {`UnitTests`, `Unit`} or no `type` trait; `IntegrationTests` excluded (VSTest treats
+  an absent property as `!=` any value); `Category!=no-mutate` is the faithful port of
+  `-DexcludeTags=no-mutate`. `--test-command` overrides entirely (then coverage = allCovered).
+- **Baseline + coverage** come from one `dotnet test --collect` call; the runner reads the newest
+  `coverage.cobertura.xml` under the results dir. `--reuse-coverage` reuses it; missing → continue
+  without filtering (spec §9). The coverage run passes **`-p:DeterministicSourcePaths=false`** so
+  coverlet's Cobertura `<source>` stays a real on-disk path (the A4 key reconciles; defeats the
+  deterministic-build `/_/…` remap); the executed-test count for the DD2b zero-tests gate comes from
+  the baseline `.trx` (`CoverageRun.ExecutedTestCount`, a DD2b model extension).
+- **Baseline test-project scoping (all three baseline paths, DD3-consistent):** the **fresh** path
+  scopes via `CoverageRunner` (explicit `<Project>.Tests.csproj`, cwd = its dir); the **reuse** path
+  applies `WithTestProject(<absolute TestProjectFile>)` with cwd = test-project dir (S7 finding-4 fix —
+  absolute is correct here since cwd is the *real* project dir, deliberately unlike the worker path's
+  repo-root-relative form); the **`--test-command`** path runs the user command at the **workspace
+  root** (S7 finding-1 fix — aligned with the workers, which run at their repo-root copy). All three
+  therefore bind to exactly the resolved test project, never fanning out to a stray `.sln`.
+- **Coverage key (A4):** resolve each Cobertura `<class filename>` against the report `<sources>` to
+  an absolute path and compare case-insensitively to the target site's absolute path; covered iff the
+  `<line … hits=H>` has `H>0`. (Replaces JaCoCo package-path keying / `SourcePathNormalizer`.)
+- **Worker isolation:** copy the **repo root** (workspace root) excluding `bin/ obj/ .git/ .vs/
+  TestResults/` and the worker base; the worker base lives under
+  `%TEMP%/mutate4csharp/run-<guid>/worker-N`; the mutated file lives at the copy-root-relative path;
+  `dotnet test` runs with cwd = worker root, targeting the copy-relative test project. (A
+  ProjectReference-closure copy is a deferred optimization — see the feature file.)
 
 ## Idiomatic policy
 
-- **Adopt-now baseline (I-series):** nullable enable; `record` value types; `InvariantCulture` +
-  `"\n"`; `XDocument` in the coverage adapter; async stdout drain; `IReadOnlyList` returns.
-- **Greenlit follow-ons (after the faithful baseline is green):** O1 — `ExitCode` enum; O2 —
-  subprocess timeout + cancellation.
-- **Deferred (Mr. Das to decide later):** O3 — typed coverage lookup (reshapes parity tests); O4 —
-  fraction-coverage (spec §10 wording); O5 — globbing discovery; O6 — `[Theory]` consolidation.
-- **Declined:** `System.CommandLine` (breaks CLI contract), off-the-shelf CC metrics (breaks
-  oracles), DI container, micro-optimizations.
+- **Adopt-now baseline:** nullable enable; `record` value types for `model/`; `InvariantCulture` for
+  all rendered numbers; explicit `"\n"` in report / scan / manifest output; async stdout/stderr drain
+  + `Process.Kill(entireProcessTree: true)`; `IReadOnlyList<T>` returns; `Environment.ProcessorCount`
+  for default max-workers (`max(1, N/2)`); ordinal string comparisons; single-file `CSharpCompilation`
+  for the semantic model; file-scoped namespaces + `_camelCase` privates + `I`-prefixed interfaces.
+- **Static vs instance (CA1822):** `CA1822` is globally disabled in `.editorconfig` (alongside
+  `CA1515`/`CA2007`) — a purity/perf rule that fights deliberate app-level DI composition and never
+  flags a bug. **Mirror `mutate4java` per member:** port Java `static` members as `static` (e.g.
+  `ManifestValueCodec.encode/decode`), and keep Java instance-composed helpers as **instances**
+  (preserving the ctor/field-injection composition graph). Never staticize a stateless helper merely
+  to satisfy the analyzer.
+- **Ordinal sorting (fidelity landmine):** any Java `String.compareTo` / natural-order sort maps to
+  `StringComparer.Ordinal` (UTF-16 ordinal) — never a culture/invariant comparer. A culture comparer
+  would silently reorder and change hash-affecting order (manifest module hash, and later
+  selection/report ordering). Applies to all string ordering across the port.
+- **Exception-mapping fidelity (worker-cleanup retry):** `WorkerWorkspaces` deletion retries on
+  transient locks. Java's `AccessDeniedException extends IOException`, so its `IOException` retry arm
+  already covers permission denials; .NET's `UnauthorizedAccessException` is **not** an `IOException`,
+  so `TryDelete` explicitly catches it and returns `new IOException(msg, ex)` → `DeleteWithRetries`
+  treats it as retryable (5×/50ms), matching Java's behavior. General rule: when porting Java
+  `catch (IOException)` cleanup, map the .NET exceptions that Java's `IOException` hierarchy subsumes
+  (notably `UnauthorizedAccessException`) into the same retry path rather than letting them escape.
+- **Record mapping (by semantics, not keyword):** a Java `record`/`final class` used as a **value
+  carrier** → C# `record`; one used as a **reference-identity resource/handle** (e.g. `CoverageReport`,
+  `WorkerWorkspaces`) → C# `sealed class` (a record over `IReadOnlyList`/handle fields would emit a
+  misleading reference-based `Equals` nobody should call).
+- **Greenlit engineering (behavior-neutral):** P1 single Roslyn walk (sites + scopes together); P2
+  `record struct` for the tiny hot keys (`CoverageSite`, `ScopeRef`); P3 `Channel<MutationJob>` worker
+  pool with identical scheduling semantics.
+- **Declined:** `System.CommandLine` (the exact error strings + conflict rules are asserted verbatim
+  by `CliArgumentsParserTest`); Stryker.NET as the engine.
 
-## Test-parity note (fail-fast)
+## Timeouts, workers, exit codes (faithful)
 
-The single knowing parity break: ~4 `CliApplication`/`Program` coverage-path tests change from
-"warn + `N/A` + exit 0" to fail-fast; **+2** new fail-fast tests. All other assertions are identical.
+- Mutant timeout = `max(1000ms, max(1, baselineDuration) * timeoutFactor)`; default factor `10`; a
+  timeout → **KILLED (timeout)**, sentinel exit `124`.
+- Default max-workers = `max(1, ProcessorCount/2)`; `--max-workers` caps it.
+- Exit codes: `0` success / all killed / all-uncovered / scan / manifest-update; `1` usage error; `2`
+  baseline failed **or** no unit-test project **or** zero unit tests executed; `3` ≥1 survivor.
 
-## Environment adaptations (from nucleus)
+## Environment / CI
 
-- **Dropped as N/A for a CLI:** web-app liveness watch / `run-app` / `dev.ps1` / `session-startup`,
-  dev-cert fix, bicep lint, dev secrets, business NuGet packages (MediatR/AutoMapper/etc.).
-- **Kept & adapted:** `.editorconfig`; analyzers (NetAnalyzers, StyleCop, BannedApiAnalyzers);
-  warnings-as-errors in Release; `global.json`; `nuget.config` (nuget.org only); the agentic loop
-  files; `meta-design` + feature template; `retrospective` + `build-test` skills.
-- **New:** GitHub Actions CI (nucleus used Azure DevOps).
+- CI is GitHub Actions (`.github/workflows/ci.yml`): restore → build (Release, warnings-as-errors) →
+  test with coverage. `master` is **remote-protected** — every change lands via PR.
+- Kept from the scaffold: `.editorconfig`; analyzers (NetAnalyzers / StyleCop / BannedApi);
+  warnings-as-errors in Release; `global.json`; `nuget.config` (nuget.org only); the agentic-loop
+  files; `meta-design` + feature template; the `build-test` skills.
+
+## Test-parity ledger
+
+The fidelity mandate is "every mutate4java test → a faithful C# counterpart." Deviations from a
+1:1 port are recorded here so an auditor never reads a dropped test as missing coverage:
+
+- **T15 CLI-application oracle = 25 cases = 21 faithful Java ports + 4 DD2-new.** The 4 new cases pin
+  the DD2/DD2b departures (no-owning-project, no-test-project, zero-unit-tests, reuse/`--test-command`
+  exemptions) — departures that have **no Java oracle** by construction.
+- **4 Java tests dropped as Maven-obsolete (under DD3/A4).** `moduleRootFor` / `sourceSuffix`-style
+  tests asserted mutate4java's whole-owning-module Maven resolution and JaCoCo package-path keying,
+  both of which DD3 (single-project `<Project>.Tests|.UnitTests` scoping) and A4 (Cobertura
+  `<sources>`-relative absolute-path keying) **replace**. The replacement behavior is covered by
+  `ModuleResolverTests` + the Cobertura parser tests — so the behavior is not lost, only relocated.
+- **S7 remediation adds (findings surfaced by the independent `gpt-5.6-sol` eval).** The blind eval
+  (fed only the Requirements) confirmed most "non-conformance" flags were the approved DD1–DD4
+  departures, and surfaced genuine gaps now closed: **A1** green all-killed→exit-0 + mixed-UNCOVERED
+  report; **A2** baseline-red→exit-2; **A3** `--update-manifest`-on-red→exit-0 (tests not run);
+  **A4** `ProcessTestCommandExecutorTests` (5 faithful ports — configured run, `WithCommand`/
+  `WithTestProject` argv, timeout→124, output-on-failure); **A5** consolidated 4-family KILLED in one
+  run (the operator set stays exhaustively pinned by `MutationCatalogTests`); **A6** `--lines` e2e
+  (CliExecution-scope); **A7** guarded real-timeout IT.
+- **Testability seam (A4).** `ProcessTestCommandExecutor.Command` (get-only `IReadOnlyList<string>?`,
+  `null` on the raw-launcher path, **never read by `RunTests`**) exposes the constructed argv so the
+  DD3 `WithTestProject` / A9 `WithCommand` argv is assertable without spawning. `public` is mandated by
+  the no-`internal` guardrail; it carries the command as executor state, which is **more** faithful
+  than the earlier omission (Java's `ProcessTestCommandExecutor` holds the override in a private
+  write-but-never-read field). `ProcessTestCommandFactory.ShellCommand` is the single OS-detected
+  shell-argv source of truth (`cmd.exe /c` / `/bin/sh -lc`) shared by `Command` and the spawn path —
+  byte-identical A9 behavior.

@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+  </PropertyGroup>
+
+  <!-- xUnit + coverlet.collector + FluentAssertions [7.0.0,8.0.0); also imports Common.targets. -->
+  <Import Project="..\..\Mutate4CSharp.Tests.Common.targets" />
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Mutate4CSharp\Mutate4CSharp.csproj" />
+  </ItemGroup>
+
+</Project>

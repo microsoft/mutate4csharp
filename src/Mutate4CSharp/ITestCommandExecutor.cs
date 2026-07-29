@@ -1,0 +1,53 @@
+namespace Microsoft.Mutate4CSharp;
+
+using Microsoft.Mutate4CSharp.Model;
+
+/// <summary>
+/// Faithful port of mutate4java's top-level <c>TestCommandExecutor</c> interface: the seam the engine
+/// uses to run a project's tests and capture the resulting <see cref="TestRun"/>. It lives in the
+/// root <c>Microsoft.Mutate4CSharp</c> namespace because the Java type lives in the top-level
+/// <c>mutate4java</c> package (alongside <c>CliArguments</c> / <c>CliMode</c>), and its concrete
+/// implementation is <see cref="Exec.ProcessTestCommandExecutor"/>.
+/// </summary>
+public interface ITestCommandExecutor
+{
+    /// <summary>
+    /// Runs the project's tests from the given project root, terminating the run once
+    /// <paramref name="timeoutMillis"/> elapses (a non-positive value means no timeout).
+    /// </summary>
+    /// <param name="projectRoot">The directory the test command runs in.</param>
+    /// <param name="timeoutMillis">The wall-clock timeout in milliseconds; non-positive means unbounded.</param>
+    /// <returns>The test run's exit code, merged output, duration, and timeout flag.</returns>
+    TestRun RunTests(string projectRoot, long timeoutMillis);
+
+    /// <summary>
+    /// Returns an executor that runs the given verbatim command string through a shell instead of the
+    /// default test command. The default implementation ignores the override and returns this
+    /// executor unchanged, faithful to mutate4java's default method.
+    /// </summary>
+    /// <param name="command">The verbatim shell command to run in place of the default.</param>
+    /// <returns>An executor bound to <paramref name="command"/>, or this executor if unsupported.</returns>
+    ITestCommandExecutor WithCommand(string command)
+    {
+        return this;
+    }
+
+    /// <summary>
+    /// Returns an executor that scopes the default test command to the given test project, passed as the
+    /// explicit <c>dotnet test</c> target. The path may be absolute or relative to the executor's working
+    /// directory; scoping to one project is what keeps <c>dotnet test</c> from fanning a directory's
+    /// <c>.sln</c>/second <c>.csproj</c> out. The <em>relative-to-the-repo-root</em> form is a property of
+    /// the per-mutant worker path specifically: each worker runs with its own repo-root copy as the
+    /// working directory, so a repo-root-relative target resolves to the mutated copy
+    /// (<c>workerRoot/&lt;testProjectPath&gt;</c>) — there an absolute original-repo path would test the
+    /// un-mutated original and every mutant would silently survive. The default implementation ignores the
+    /// scoping and returns this executor unchanged, so a <c>--test-command</c> override (or a stub) is
+    /// left untouched.
+    /// </summary>
+    /// <param name="testProjectPath">The path to the resolved test project (absolute, or relative to the working directory).</param>
+    /// <returns>An executor scoped to <paramref name="testProjectPath"/>, or this executor if unsupported.</returns>
+    ITestCommandExecutor WithTestProject(string testProjectPath)
+    {
+        return this;
+    }
+}

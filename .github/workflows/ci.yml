@@ -18,15 +18,22 @@ jobs:
           global-json-file: global.json
 
       - name: Restore
-        run: dotnet restore crap4csharp.sln
+        run: dotnet restore mutate4csharp.sln
 
       - name: Build (Release, warnings-as-errors)
-        run: dotnet build crap4csharp.sln --configuration Release --no-restore
+        run: dotnet build mutate4csharp.sln --configuration Release --no-restore
 
-      - name: Test (with coverage)
+      - name: Unit tests (with coverage)
         run: >
-          dotnet test crap4csharp.sln --configuration Release --no-build
+          dotnet test mutate4csharp.sln --configuration Release --no-build
+          --filter "type!=IntegrationTests"
           --collect:"XPlat Code Coverage" --results-directory coverage
+
+      - name: Integration tests
+        run: >
+          dotnet test mutate4csharp.sln --configuration Release --no-build
+          --filter "type=IntegrationTests"
+          --results-directory coverage-it
 
       - name: Upload coverage
         if: always()

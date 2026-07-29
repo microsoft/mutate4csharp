@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+  </PropertyGroup>
+
+  <!-- Shared analyzers, warnings-as-errors (Release), nullable, docs, lock files,
+       AssemblyName/RootNamespace = Microsoft.$(MSBuildProjectName). -->
+  <Import Project="..\..\Mutate4CSharp.Common.targets" />
+
+  <ItemGroup>
+    <!-- Roslyn: single new runtime dependency (parse + mutation). Pinned for deterministic restore. -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" />
+  </ItemGroup>
+
+</Project>

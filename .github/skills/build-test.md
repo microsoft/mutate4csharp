@@ -1,14 +1,14 @@
 ---
 name: build-and-test
-description: Builds crap4csharp and runs unit tests (excludes integration tests). Used for fast feedback.
+description: Builds mutate4csharp and runs unit tests (excludes integration tests). Used for fast feedback.
 ---
 
 ## Commands
 
 Run from the repository root:
 
-    dotnet build crap4csharp.sln --configuration Release
-    dotnet test crap4csharp.sln --configuration Release --filter "Category!=Integration"
+    dotnet build mutate4csharp.sln --configuration Release
+    dotnet test mutate4csharp.sln --configuration Release --filter "type!=IntegrationTests"
 
 ## Pass criteria
 
@@ -16,4 +16,4 @@ Run from the repository root:
 - All unit tests pass.
 
 Integration tests (real `git`, spawning the built CLI, spawning processes) are tagged
-`[Trait("Category", "Integration")]` and excluded here; run `build-test-full` for those.
+`[Trait("type", "IntegrationTests")]` and excluded here; run `build-test-full` for those.

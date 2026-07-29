@@ -141,6 +141,10 @@ dotnet_diagnostic.IDE0005.severity = warning
 # CA1515: Consider making public types internal (this is an app/CLI; keep public where least-privilege allows)
 dotnet_diagnostic.CA1515.severity = none
 
+# CA1822: Mark members as static: a purity/perf rule that fights deliberate app-level DI composition and
+# never flags a bug; the port mirrors mutate4java's per-member static/instance choice instead.
+dotnet_diagnostic.CA1822.severity = none
+
 # IDE0022: Use block body for method
 dotnet_diagnostic.IDE0022.severity = none
 
